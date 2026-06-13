@@ -1,0 +1,377 @@
+-- [[ Roblox Delta Executor Premium Mod Menu - Ultimate Safe Edition ]] --
+
+local CoreGui = game:GetService("CoreGui")
+local TweenService = game:GetService("TweenService")
+local Lighting = game:GetService("Lighting")
+local UserInputService = game:GetService("UserInputService")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+local LocalPlayer = Players.LocalPlayer
+
+-- আগের ডুপ্লিকেট UI থাকলে তা রিমুভ করার জন্য
+if CoreGui:FindFirstChild("DeltaPremiumMenu") then
+    CoreGui.DeltaPremiumMenu:Destroy()
+end
+
+-- ১. মেইন স্ক্রিন GUI তৈরি
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "DeltaPremiumMenu"
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.ResetOnSpawn = false
+ScreenGui.IgnoreGuiInset = true
+ScreenGui.Parent = CoreGui
+
+-- ২. মড মেনু ওপেন/ক্লোজ বাটন
+local MenuToggleButton = Instance.new("TextButton")
+local ToggleCorner = Instance.new("UICorner")
+
+MenuToggleButton.Name = "MenuToggleButton"
+MenuToggleButton.BackgroundColor3 = Color3.fromRGB(30, 144, 255)
+MenuToggleButton.Position = UDim2.new(0.02, 0, 0.2, 0)
+MenuToggleButton.Size = UDim2.new(0, 60, 0, 60)
+MenuToggleButton.Font = Enum.Font.SourceSansBold
+MenuToggleButton.Text = "MENU"
+MenuToggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+MenuToggleButton.TextSize = 16
+MenuToggleButton.Active = true
+
+ToggleCorner.CornerRadius = UDim.new(0, 30)
+ToggleCorner.Parent = MenuToggleButton
+MenuToggleButton.Parent = ScreenGui
+
+-- ৩. মেইন মড মেনু ফ্রেম
+local MainFrame = Instance.new("Frame")
+local FrameCorner = Instance.new("UICorner")
+local TitleLabel = Instance.new("TextLabel")
+local TitleCorner = Instance.new("UICorner")
+local UIListLayout = Instance.new("UIListLayout")
+
+MainFrame.Name = "MainFrame"
+MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+MainFrame.Position = UDim2.new(0.1, 0, 0.2, 0)
+MainFrame.Size = UDim2.new(0, 260, 0, 0)
+MainFrame.AutomaticSize = Enum.AutomaticSize.Y
+MainFrame.Visible = false
+MainFrame.Active = true
+
+FrameCorner.CornerRadius = UDim.new(0, 12)
+FrameCorner.Parent = MainFrame
+
+TitleLabel.Name = "TitleLabel"
+TitleLabel.Size = UDim2.new(1, 0, 0, 45)
+TitleLabel.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+TitleLabel.Font = Enum.Font.SourceSansBold
+TitleLabel.Text = "Delta Premium V3"
+TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+TitleLabel.TextSize = 20
+TitleLabel.LayoutOrder = 0
+
+TitleCorner.CornerRadius = UDim.new(0, 12)
+TitleCorner.Parent = TitleLabel
+TitleLabel.Parent = MainFrame
+
+UIListLayout.Parent = MainFrame
+UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+UIListLayout.Padding = UDim.new(0, 8)
+UIListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+
+-- ৪. বাটন তৈরি করার ফাংশন
+local menuTweenInfo = TweenInfo.new(0.2, Enum.EasingStyle.Quad)
+local function CreateMenuButton(name, text, color, order)
+    local Button = Instance.new("TextButton")
+    local BCorn = Instance.new("UICorner")
+    
+    Button.Name = name
+    Button.Size = UDim2.new(0, 230, 0, 38)
+    Button.BackgroundColor3 = color
+    Button.Font = Enum.Font.SourceSansBold
+    Button.Text = text
+    Button.TextColor3 = Color3.fromRGB(255, 255, 255)
+    Button.TextSize = 15
+    Button.LayoutOrder = order
+    Button.ClipsDescendants = true
+    
+    BCorn.CornerRadius = UDim.new(0, 6)
+    BCorn.Parent = Button
+    Button.Parent = MainFrame
+    
+    Button.MouseEnter:Connect(function()
+        if Button.BackgroundColor3 ~= Color3.fromRGB(38, 166, 91) then
+            TweenService:Create(Button, menuTweenInfo, {BackgroundTransparency = 0.2}):Play()
+        end
+    end)
+    Button.MouseLeave:Connect(function()
+        TweenService:Create(Button, menuTweenInfo, {BackgroundTransparency = 0}):Play()
+    end)
+    
+    return Button
+end
+
+-- ৫. স্লাইডার তৈরি করার অ্যাডভান্সড ফাংশন
+local function CreateSlider(name, text, min, max, default, order, callback)
+    local SliderFrame = Instance.new("Frame")
+    local SliderTitle = Instance.new("TextLabel")
+    local SliderContainer = Instance.new("Frame")
+    local SliderBar = Instance.new("Frame")
+    local SliderDot = Instance.new("Frame")
+    local DotCorner = Instance.new("UICorner")
+    local FrameCorn = Instance.new("UICorner")
+    local BarCorn = Instance.new("UICorner")
+
+    SliderFrame.Name = name
+    SliderFrame.Size = UDim2.new(0, 230, 0, 50)
+    SliderFrame.BackgroundColor3 = Color3.fromRGB(45, 52, 54)
+    SliderFrame.LayoutOrder = order
+    FrameCorn.CornerRadius = UDim.new(0, 6)
+    FrameCorn.Parent = SliderFrame
+
+    SliderTitle.Size = UDim2.new(1, 0, 0, 25)
+    SliderTitle.BackgroundTransparency = 1
+    SliderTitle.Font = Enum.Font.SourceSansBold
+    SliderTitle.Text = text .. ": " .. default
+    SliderTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+    SliderTitle.TextSize = 14
+    SliderTitle.Parent = SliderFrame
+
+    SliderContainer.Size = UDim2.new(0, 200, 0, 6)
+    SliderContainer.Position = UDim2.new(0.5, -100, 0.7, -3)
+    SliderContainer.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+    BarCorn.CornerRadius = UDim.new(0, 3)
+    BarCorn.Parent = SliderContainer
+    SliderContainer.Parent = SliderFrame
+
+    SliderBar.Size = UDim2.new((default - min) / (max - min), 0, 1, 0)
+    SliderBar.BackgroundColor3 = Color3.fromRGB(30, 144, 255)
+    Instance.new("UICorner", SliderBar).CornerRadius = UDim.new(0, 3)
+    SliderBar.Parent = SliderContainer
+
+    SliderDot.Size = UDim2.new(0, 12, 0, 12)
+    SliderDot.Position = UDim2.new((default - min) / (max - min), -6, 0.5, -6)
+    SliderDot.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    DotCorner.CornerRadius = UDim.new(0, 6)
+    DotCorner.Parent = SliderDot
+    SliderDot.Parent = SliderContainer
+
+    SliderFrame.Parent = MainFrame
+
+    -- স্লাইডার ড্র্যাগ লজিক
+    local snap = false
+    local function update(input)
+        local unit = math.clamp((input.Position.X - SliderContainer.AbsolutePosition.X) / SliderContainer.AbsoluteSize.X, 0, 1)
+        local value = math.floor(min + (max - min) * unit)
+        SliderTitle.Text = text .. ": " .. value
+        SliderBar.Size = UDim2.new(unit, 0, 1, 0)
+        SliderDot.Position = UDim2.new(unit, -6, 0.5, -6)
+        callback(value)
+    end
+
+    SliderContainer.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            snap = true
+            update(input)
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if snap and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            update(input)
+        end
+    end)
+
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            snap = false
+        end
+    end)
+end
+
+-- --- [ মেনুর বাটনসমূহ সেটআপ ] ---
+local PlatformBtn    = CreateMenuButton("PlatformBtn", "Always Platform: OFF", Color3.fromRGB(45, 52, 54), 1)
+local FPSBoostBtn    = CreateMenuButton("FPSBoostBtn", "Ultimate FPS Boost", Color3.fromRGB(35, 35, 35), 4)
+local FullBrightBtn  = CreateMenuButton("FullBrightBtn", "Full Bright: OFF", Color3.fromRGB(35, 35, 35), 5)
+
+local BottomPadding = Instance.new("UIPadding")
+BottomPadding.PaddingBottom = UDim.new(0, 15)
+BottomPadding.Parent = MainFrame
+MainFrame.Parent = ScreenGui
+
+-- --- [ গ্লোবাল ভ্যালুসমূহ ] ---
+local currentSpeed = 16
+local currentJump = 50
+local platformEnabled = false
+local platformPart = nil
+local platformConnection = nil
+
+-- স্লাইডারসমূহ
+CreateSlider("SpeedSlider", "Custom WalkSpeed", 16, 150, 16, 2, function(value)
+    currentSpeed = value
+    local humanoid = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+    if humanoid then humanoid.WalkSpeed = currentSpeed end
+end)
+
+CreateSlider("JumpSlider", "Custom JumpPower", 50, 200, 50, 3, function(value)
+    currentJump = value
+    local humanoid = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+    if humanoid then 
+        humanoid.UseJumpPower = true
+        humanoid.JumpPower = currentJump 
+    end
+end)
+
+
+-- ৬. ড্র্যাগিং সিস্টেম
+local function MakeDraggable(gui)
+    local dragging, dragInput, dragStart, startPos
+    gui.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = gui.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then dragging = false end
+            end)
+        end
+    end)
+    gui.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then dragInput = input end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            local delta = input.Position - dragStart
+            local targetPos = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+            TweenService:Create(gui, TweenInfo.new(0.1, Enum.EasingStyle.OutQuad), {Position = targetPos}):Play()
+        end
+    end)
+end
+MakeDraggable(MainFrame)
+MakeDraggable(MenuToggleButton)
+
+-- ৭. মেনু ওপেন/ক্লোজ লজিক
+MenuToggleButton.MouseButton1Click:Connect(function()
+    MainFrame.Visible = not MainFrame.Visible
+    if MainFrame.Visible then
+        MenuToggleButton.Text = "X"
+        TweenService:Create(MenuToggleButton, menuTweenInfo, {BackgroundColor3 = Color3.fromRGB(231, 76, 60)}):Play()
+    else
+        MenuToggleButton.Text = "MENU"
+        TweenService:Create(MenuToggleButton, menuTweenInfo, {BackgroundColor3 = Color3.fromRGB(30, 144, 255)}):Play()
+    end
+end)
+
+
+-- ==========================================
+--  🔥 কোর ফিচার ফাংশনালিটি
+-- ==========================================
+
+-- [ Fixed: Always-On Platform Logic - আর ক্যারেক্টার লিফট করবে না ]
+local function TogglePlatform(enable)
+    if enable then
+        if not platformPart or not platformPart.Parent then
+            platformPart = Instance.new("Part")
+            platformPart.Size = Vector3.new(6, 0.5, 6)
+            platformPart.Anchored = true
+            platformPart.CanCollide = true
+            platformPart.Transparency = 1 
+            platformPart.Name = "DeltaStatic_InvisibleFloor"
+            platformPart.Parent = workspace
+        end
+        
+        if not platformConnection then
+            platformConnection = RunService.Heartbeat:Connect(function()
+                local character = LocalPlayer.Character
+                local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+                if rootPart and platformPart then
+                    -- ৩.৬ স্টাড নিচে সেট করা হয়েছে যাতে অটো-লিফটিং গ্লিচ না হয়
+                    platformPart.Position = rootPart.Position - Vector3.new(0, 3.6, 0)
+                end
+            end)
+        end
+    else
+        if platformConnection then platformConnection:Disconnect() platformConnection = nil end
+        if platformPart then platformPart:Destroy() platformPart = nil end
+    end
+end
+
+PlatformBtn.MouseButton1Click:Connect(function()
+    platformEnabled = not platformEnabled
+    if platformEnabled then
+        TogglePlatform(true)
+        PlatformBtn.Text = "Always Platform: ON"
+        TweenService:Create(PlatformBtn, menuTweenInfo, {BackgroundColor3 = Color3.fromRGB(38, 166, 91)}):Play()
+    else
+        TogglePlatform(false)
+        PlatformBtn.Text = "Always Platform: OFF"
+        TweenService:Create(PlatformBtn, menuTweenInfo, {BackgroundColor3 = Color3.fromRGB(45, 52, 54)}):Play()
+    end
+end)
+
+-- ক্যারেক্টার রিস্পন বা স্পিড রিসেট প্রোটেকশন লুপ
+task.spawn(function()
+    while true do
+        local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+        local humanoid = character:WaitForChild("Humanoid", 5)
+        if humanoid then
+            humanoid.WalkSpeed = currentSpeed
+            humanoid.UseJumpPower = true
+            humanoid.JumpPower = currentJump
+        end
+        task.wait(0.5)
+    end
+end)
+
+
+-- ==========================================
+--  অপ্টিমাইজড ফিচারসমূহ (FPS Boost, Brightness)
+-- ==========================================
+
+local function OptimizeObject(object)
+    pcall(function()
+        if object:IsA("ParticleEmitter") or object:IsA("Smoke") or object:IsA("Fire") or object:IsA("Sparkles") then
+            object.Enabled = false
+        elseif object:IsA("Explosion") then
+            object.Visible = false
+        elseif object:IsA("MeshPart") or object:IsA("Part") or object:IsA("CornerWedgePart") or object:IsA("WedgePart") or object:IsA("TrussPart") then
+            if object.Name ~= "DeltaStatic_InvisibleFloor" then
+                object.Material = Enum.Material.SmoothPlastic
+                object.Reflectance = 0
+            end
+        elseif object:IsA("Decal") or object:IsA("Texture") then
+            object:Destroy()
+        end
+    end)
+end
+
+local fpsBoosted = false
+FPSBoostBtn.MouseButton1Click:Connect(function()
+    if fpsBoosted then return end
+    fpsBoosted = true
+    settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+    Lighting.GlobalShadows = false
+    Lighting.FogEnd = 9e9
+    task.spawn(function()
+        local descendants = game:GetDescendants()
+        for i, object in ipairs(descendants) do
+            OptimizeObject(object)
+            if i % 400 == 0 then task.wait() end
+        end
+    end)
+    game.DescendantAdded:Connect(OptimizeObject)
+    FPSBoostBtn.Text = "FPS Boosted"
+    TweenService:Create(FPSBoostBtn, menuTweenInfo, {BackgroundColor3 = Color3.fromRGB(38, 166, 91)}):Play()
+end)
+
+local brightEnabled = false
+FullBrightBtn.MouseButton1Click:Connect(function()
+    brightEnabled = not brightEnabled
+    local targetAmbient = brightEnabled and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(128, 128, 128)
+    local targetBrightness = brightEnabled and 2 or 1
+    TweenService:Create(Lighting, TweenInfo.new(0.3), {Ambient = targetAmbient, OutdoorAmbient = targetAmbient, Brightness = targetBrightness}):Play()
+    if brightEnabled then
+        FullBrightBtn.Text = "Full Bright: ON"
+        TweenService:Create(FullBrightBtn, menuTweenInfo, {BackgroundColor3 = Color3.fromRGB(38, 166, 91)}):Play()
+    else
+        FullBrightBtn.Text = "Full Bright: OFF"
+        TweenService:Create(FullBrightBtn, menuTweenInfo, {BackgroundColor3 = Color3.fromRGB(45, 52, 54)}):Play()
+    end
+end)
