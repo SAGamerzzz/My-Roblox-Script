@@ -1,4 +1,4 @@
--- [[ Afridi Utility V6 - Ultra FPS Edition ]] --
+-- [[ Afridi Utility V7 - Tab Edition ]] --
 
 local CoreGui      = game:GetService("CoreGui")
 local TweenService = game:GetService("TweenService")
@@ -48,6 +48,150 @@ local autoFarmTarget      = nil
 local fakeESPEnabled      = false
 local fakeESPHighlights   = {}
 local fakeESPConnection   = nil
+local espEnabled          = false
+local espHighlights       = {}
+local freecamEnabled      = false
+local freecamPart         = nil
+local freecamCamera       = nil
+local fovEnabled          = false
+local originalFOV         = 70
+local seeThruEnabled      = false
+local seeThruConnections  = {}
+local selectedTrollPlayer = nil
+local currentTheme        = "Dark"
+local savedPreset         = {}
+
+-- =================================================================
+-- THEME SYSTEM
+-- =================================================================
+local Themes = {
+    Dark = {
+        bg0       = Color3.fromRGB(8,10,20),
+        bg1       = Color3.fromRGB(14,17,32),
+        bg2       = Color3.fromRGB(20,24,44),
+        bg2h      = Color3.fromRGB(26,32,58),
+        accent    = Color3.fromRGB(130,80,255),
+        accentDim = Color3.fromRGB(80,50,160),
+        green     = Color3.fromRGB(50,220,110),
+        gold      = Color3.fromRGB(255,190,50),
+        purple    = Color3.fromRGB(160,80,255),
+        orange    = Color3.fromRGB(255,120,30),
+        red       = Color3.fromRGB(255,70,70),
+        textHi    = Color3.fromRGB(220,210,255),
+        textMid   = Color3.fromRGB(160,150,210),
+        textDim   = Color3.fromRGB(90,85,130),
+        textOn    = Color3.fromRGB(140,255,210),
+    },
+    Neon = {
+        bg0       = Color3.fromRGB(0,0,0),
+        bg1       = Color3.fromRGB(5,5,15),
+        bg2       = Color3.fromRGB(10,10,25),
+        bg2h      = Color3.fromRGB(18,5,35),
+        accent    = Color3.fromRGB(200,0,255),
+        accentDim = Color3.fromRGB(120,0,160),
+        green     = Color3.fromRGB(0,255,100),
+        gold      = Color3.fromRGB(255,220,0),
+        purple    = Color3.fromRGB(200,0,255),
+        orange    = Color3.fromRGB(255,80,0),
+        red       = Color3.fromRGB(255,0,50),
+        textHi    = Color3.fromRGB(255,255,255),
+        textMid   = Color3.fromRGB(200,180,255),
+        textDim   = Color3.fromRGB(100,80,140),
+        textOn    = Color3.fromRGB(0,255,180),
+    },
+    Glass = {
+        bg0       = Color3.fromRGB(20,20,30),
+        bg1       = Color3.fromRGB(30,30,45),
+        bg2       = Color3.fromRGB(40,40,60),
+        bg2h      = Color3.fromRGB(50,50,75),
+        accent    = Color3.fromRGB(150,150,255),
+        accentDim = Color3.fromRGB(100,100,180),
+        green     = Color3.fromRGB(100,255,150),
+        gold      = Color3.fromRGB(255,200,80),
+        purple    = Color3.fromRGB(180,100,255),
+        orange    = Color3.fromRGB(255,140,60),
+        red       = Color3.fromRGB(255,100,100),
+        textHi    = Color3.fromRGB(240,240,255),
+        textMid   = Color3.fromRGB(190,190,225),
+        textDim   = Color3.fromRGB(120,120,160),
+        textOn    = Color3.fromRGB(180,255,220),
+    },
+}
+
+local C = Themes[currentTheme]
+
+local tweenFast = TweenInfo.new(0.15, Enum.EasingStyle.Quad)
+local tweenMed  = TweenInfo.new(0.28, Enum.EasingStyle.Quad)
+local tweenBounce = TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+
+local function Tween(obj, props, info)
+    TweenService:Create(obj, info or tweenFast, props):Play()
+end
+
+-- Theme-aware object registry for live switching
+local themedObjects = {}
+local function RegisterThemed(obj, propMap)
+    table.insert(themedObjects, {obj=obj, propMap=propMap})
+end
+
+local function ApplyTheme(theme)
+    currentTheme = theme
+    C = Themes[theme]
+    for _, entry in ipairs(themedObjects) do
+        local props = {}
+        for prop, key in pairs(entry.propMap) do
+            props[prop] = C[key]
+        end
+        Tween(entry.obj, props, tweenMed)
+    end
+end
+
+local function SetOn(btn, stroke, col)
+    col = col or C.green
+    Tween(stroke, {Color=col, Transparency=0})
+    Tween(btn,    {TextColor3=C.textOn})
+end
+
+local function SetOff(btn, stroke, col)
+    col = col or C.accent
+    Tween(stroke, {Color=col, Transparency=0.5})
+    Tween(btn,    {TextColor3=C.textMid})
+end
+
+-- =================================================================
+-- DRAGGABLE
+-- =================================================================
+local function MakeDraggable(gui)
+    local startPos, startGuiPos, dragging = nil, nil, false
+    gui.InputBegan:Connect(function(inp)
+        if inp.UserInputType ~= Enum.UserInputType.Touch
+        and inp.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
+        dragging=true; startPos=inp.Position; startGuiPos=gui.Position
+    end)
+    UIS.InputChanged:Connect(function(inp)
+        if not dragging then return end
+        if inp.UserInputType ~= Enum.UserInputType.Touch
+        and inp.UserInputType ~= Enum.UserInputType.MouseMovement then return end
+        local d = inp.Position - startPos
+        if d.Magnitude > 6 then
+            gui.Position = UDim2.new(
+                startGuiPos.X.Scale, startGuiPos.X.Offset+d.X,
+                startGuiPos.Y.Scale, startGuiPos.Y.Offset+d.Y)
+        end
+    end)
+    UIS.InputEnded:Connect(function(inp)
+        if inp.UserInputType==Enum.UserInputType.Touch
+        or inp.UserInputType==Enum.UserInputType.MouseButton1 then dragging=false end
+    end)
+end
+
+local function GetCharacter() return LocalPlayer.Character end
+local function GetHumanoid()
+    local ch=GetCharacter(); return ch and ch:FindFirstChildOfClass("Humanoid")
+end
+local function GetRootPart()
+    local ch=GetCharacter(); return ch and ch:FindFirstChild("HumanoidRootPart")
+end
 
 -- =================================================================
 -- SCREEN GUI
@@ -61,110 +205,35 @@ ScreenGui.DisplayOrder   = 10
 ScreenGui.Parent         = CoreGui
 
 -- =================================================================
--- THEME
--- =================================================================
-local C = {
-    bg0        = Color3.fromRGB( 8,  10,  20),
-    bg1        = Color3.fromRGB(14,  17,  32),
-    bg2        = Color3.fromRGB(20,  24,  44),
-    bg2h       = Color3.fromRGB(26,  32,  58),
-    accent     = Color3.fromRGB(50, 200, 220),
-    accentDim  = Color3.fromRGB(30, 130, 150),
-    green      = Color3.fromRGB(50, 220, 110),
-    gold       = Color3.fromRGB(255, 190,  50),
-    purple     = Color3.fromRGB(160,  80, 255),
-    orange     = Color3.fromRGB(255, 120,  30),
-    red        = Color3.fromRGB(255,  70,  70),
-    textHi     = Color3.fromRGB(220, 240, 255),
-    textMid    = Color3.fromRGB(160, 185, 220),
-    textDim    = Color3.fromRGB(100, 120, 155),
-    textOn     = Color3.fromRGB(140, 255, 210),
-    textGold   = Color3.fromRGB(255, 220, 110),
-    textPurple = Color3.fromRGB(210, 160, 255),
-    textOrange = Color3.fromRGB(255, 180,  80),
-}
-
-local tweenFast = TweenInfo.new(0.15, Enum.EasingStyle.Quad)
-local tweenMed  = TweenInfo.new(0.28, Enum.EasingStyle.Quad)
-
-local function Tween(obj, props, info)
-    TweenService:Create(obj, info or tweenFast, props):Play()
-end
-
-local function SetOn(btn, stroke, col)
-    Tween(stroke, {Color = col or C.green, Transparency = 0})
-    Tween(btn,    {TextColor3 = C.textOn})
-end
-
-local function SetOff(btn, stroke, col)
-    Tween(stroke, {Color = col or C.accent, Transparency = 0.5})
-    Tween(btn,    {TextColor3 = C.textMid})
-end
-
--- =================================================================
--- DRAGGABLE
--- =================================================================
-local function MakeDraggable(gui)
-    local startPos, startGuiPos, dragging = nil, nil, false
-    gui.InputBegan:Connect(function(inp)
-        if inp.UserInputType ~= Enum.UserInputType.Touch
-        and inp.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
-        dragging = true; startPos = inp.Position; startGuiPos = gui.Position
-    end)
-    UIS.InputChanged:Connect(function(inp)
-        if not dragging then return end
-        if inp.UserInputType ~= Enum.UserInputType.Touch
-        and inp.UserInputType ~= Enum.UserInputType.MouseMovement then return end
-        local d = inp.Position - startPos
-        if d.Magnitude > 6 then
-            gui.Position = UDim2.new(
-                startGuiPos.X.Scale, startGuiPos.X.Offset + d.X,
-                startGuiPos.Y.Scale, startGuiPos.Y.Offset + d.Y)
-        end
-    end)
-    UIS.InputEnded:Connect(function(inp)
-        if inp.UserInputType == Enum.UserInputType.Touch
-        or inp.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
-    end)
-end
-
-local function GetCharacter() return LocalPlayer.Character end
-local function GetHumanoid()
-    local ch = GetCharacter(); return ch and ch:FindFirstChildOfClass("Humanoid")
-end
-local function GetRootPart()
-    local ch = GetCharacter(); return ch and ch:FindFirstChild("HumanoidRootPart")
-end
-
--- =================================================================
--- FLOATING BUTTONS
+-- FLOATING SIDE BUTTONS
 -- =================================================================
 local function MakeFloatBtn(labelTxt, yOffset)
     local btn = Instance.new("TextButton", ScreenGui)
-    btn.Size             = UDim2.new(0, 48, 0, 48)
-    btn.Position         = UDim2.new(0, 6, 0.5, yOffset)
+    btn.Size             = UDim2.new(0,48,0,48)
+    btn.Position         = UDim2.new(0,6,0.5,yOffset)
     btn.BackgroundColor3 = C.bg1
     btn.Font             = Enum.Font.GothamBold
     btn.Text             = labelTxt
     btn.TextColor3       = C.accent
     btn.TextSize         = 13
     btn.ZIndex           = 6
-    btn.Parent           = ScreenGui
-    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 14)
-    local s = Instance.new("UIStroke", btn)
-    s.Color = C.accent; s.Thickness = 1.4; s.Transparency = 0.4
+    Instance.new("UICorner",btn).CornerRadius = UDim.new(0,14)
+    local s = Instance.new("UIStroke",btn)
+    s.Color=C.accent; s.Thickness=1.4; s.Transparency=0.4
     MakeDraggable(btn)
+    RegisterThemed(btn,  {BackgroundColor3="bg1", TextColor3="accent"})
+    RegisterThemed(s,    {Color="accent"})
     return btn, s
 end
 
-local MenuBtn,  MenuBtnS      = MakeFloatBtn("FN", -54)
-local PlatBtn,  PlatBtnStroke = MakeFloatBtn("PT",   4)
+local MenuBtn,  MenuBtnS      = MakeFloatBtn("☰", -54)
+local PlatBtn,  PlatBtnStroke = MakeFloatBtn("⬛",   4)
 
 local PlatActionBtn    = Instance.new("TextButton", ScreenGui)
 local PlatActionStroke = Instance.new("UIStroke")
 do
-    PlatActionBtn.Size             = UDim2.new(0, 158, 0, 48)
-    PlatActionBtn.Position         = UDim2.new(0, 62, 0.5, 4)
+    PlatActionBtn.Size             = UDim2.new(0,158,0,48)
+    PlatActionBtn.Position         = UDim2.new(0,62,0.5,4)
     PlatActionBtn.BackgroundColor3 = C.bg2
     PlatActionBtn.Font             = Enum.Font.GothamBold
     PlatActionBtn.Text             = "Platform: OFF"
@@ -173,478 +242,724 @@ do
     PlatActionBtn.ZIndex           = 6
     PlatActionBtn.Visible          = false
     PlatActionBtn.Parent           = ScreenGui
-    Instance.new("UICorner", PlatActionBtn).CornerRadius = UDim.new(0, 13)
-    PlatActionStroke.Color = C.accent; PlatActionStroke.Thickness = 1.2
-    PlatActionStroke.Transparency = 0.5; PlatActionStroke.Parent = PlatActionBtn
+    Instance.new("UICorner",PlatActionBtn).CornerRadius = UDim.new(0,13)
+    PlatActionStroke.Color=C.accent; PlatActionStroke.Thickness=1.2
+    PlatActionStroke.Transparency=0.5; PlatActionStroke.Parent=PlatActionBtn
     MakeDraggable(PlatActionBtn)
+    RegisterThemed(PlatActionBtn,   {BackgroundColor3="bg2", TextColor3="textMid"})
+    RegisterThemed(PlatActionStroke,{Color="accent"})
 end
 
 -- =================================================================
--- MAIN FRAME
+-- MAIN FRAME  (two-panel layout)
 -- =================================================================
 local MainFrame = Instance.new("Frame", ScreenGui)
-do
-    MainFrame.Name             = "MainFrame"
-    MainFrame.BackgroundColor3 = C.bg1
-    MainFrame.Position         = UDim2.new(0, 62, 0.03, 0)
-    MainFrame.Size             = UDim2.new(0, 252, 0.94, 0)
-    MainFrame.Visible          = false
-    MainFrame.ZIndex           = 4
-    Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 20)
-    local s = Instance.new("UIStroke", MainFrame)
-    s.Color = C.accent; s.Thickness = 1.2; s.Transparency = 0.35
-    MakeDraggable(MainFrame)
+MainFrame.Name             = "MainFrame"
+MainFrame.BackgroundColor3 = C.bg0
+MainFrame.Position         = UDim2.new(0,62,0.03,0)
+MainFrame.Size             = UDim2.new(0,420,0.93,0)
+MainFrame.Visible          = false
+MainFrame.ZIndex           = 4
+Instance.new("UICorner",MainFrame).CornerRadius = UDim.new(0,20)
+local mainStroke = Instance.new("UIStroke",MainFrame)
+mainStroke.Color=C.accent; mainStroke.Thickness=1.4; mainStroke.Transparency=0.3
+MakeDraggable(MainFrame)
+RegisterThemed(MainFrame,  {BackgroundColor3="bg0"})
+RegisterThemed(mainStroke, {Color="accent"})
+
+-- Header bar (full width)
+local Header = Instance.new("Frame", MainFrame)
+Header.Size             = UDim2.new(1,0,0,54)
+Header.BackgroundColor3 = C.bg1
+Header.BorderSizePixel  = 0
+Header.ZIndex           = 6
+Instance.new("UICorner",Header).CornerRadius = UDim.new(0,20)
+-- Bottom-cover fix for rounded top only
+local headerFix = Instance.new("Frame",Header)
+headerFix.Size=UDim2.new(1,0,0.5,0); headerFix.Position=UDim2.new(0,0,0.5,0)
+headerFix.BackgroundColor3=C.bg1; headerFix.BorderSizePixel=0; headerFix.ZIndex=6
+RegisterThemed(Header,    {BackgroundColor3="bg1"})
+RegisterThemed(headerFix, {BackgroundColor3="bg1"})
+
+-- Gradient on header
+local hdrGrad = Instance.new("UIGradient",Header)
+hdrGrad.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(30,10,60)),
+    ColorSequenceKeypoint.new(1, C.bg1),
+})
+
+local accentBar = Instance.new("Frame",Header)
+accentBar.Size=UDim2.new(0,3,0.5,0); accentBar.Position=UDim2.new(0,12,0.25,0)
+accentBar.BackgroundColor3=C.accent; accentBar.BorderSizePixel=0; accentBar.ZIndex=8
+Instance.new("UICorner",accentBar).CornerRadius=UDim.new(0,4)
+RegisterThemed(accentBar,{BackgroundColor3="accent"})
+
+local TitleLbl = Instance.new("TextLabel",Header)
+TitleLbl.Size=UDim2.new(0,220,0,28); TitleLbl.Position=UDim2.new(0,22,0,6)
+TitleLbl.BackgroundTransparency=1; TitleLbl.Font=Enum.Font.GothamBold
+TitleLbl.Text="Afridi Utility"; TitleLbl.TextColor3=C.textHi
+TitleLbl.TextSize=16; TitleLbl.TextXAlignment=Enum.TextXAlignment.Left; TitleLbl.ZIndex=8
+RegisterThemed(TitleLbl,{TextColor3="textHi"})
+
+local SubLbl = Instance.new("TextLabel",Header)
+SubLbl.Size=UDim2.new(0,220,0,16); SubLbl.Position=UDim2.new(0,22,0,30)
+SubLbl.BackgroundTransparency=1; SubLbl.Font=Enum.Font.Gotham
+SubLbl.Text="V7  ·  Tab Edition"; SubLbl.TextColor3=C.gold
+SubLbl.TextSize=10; SubLbl.TextXAlignment=Enum.TextXAlignment.Left; SubLbl.ZIndex=8
+RegisterThemed(SubLbl,{TextColor3="gold"})
+
+-- Minimize & Close buttons in header
+local MinBtn = Instance.new("TextButton",Header)
+MinBtn.Size=UDim2.new(0,32,0,32); MinBtn.Position=UDim2.new(1,-76,0.5,-16)
+MinBtn.BackgroundColor3=C.bg2; MinBtn.Font=Enum.Font.GothamBold
+MinBtn.Text="−"; MinBtn.TextColor3=C.textMid; MinBtn.TextSize=18; MinBtn.ZIndex=9
+Instance.new("UICorner",MinBtn).CornerRadius=UDim.new(0,8)
+local minStroke=Instance.new("UIStroke",MinBtn)
+minStroke.Color=C.accentDim; minStroke.Thickness=1; minStroke.Transparency=0.5
+RegisterThemed(MinBtn,    {BackgroundColor3="bg2", TextColor3="textMid"})
+RegisterThemed(minStroke, {Color="accentDim"})
+
+local CloseBtn = Instance.new("TextButton",Header)
+CloseBtn.Size=UDim2.new(0,32,0,32); CloseBtn.Position=UDim2.new(1,-38,0.5,-16)
+CloseBtn.BackgroundColor3=Color3.fromRGB(28,10,10); CloseBtn.Font=Enum.Font.GothamBold
+CloseBtn.Text="✕"; CloseBtn.TextColor3=C.red; CloseBtn.TextSize=14; CloseBtn.ZIndex=9
+Instance.new("UICorner",CloseBtn).CornerRadius=UDim.new(0,8)
+local closeStroke=Instance.new("UIStroke",CloseBtn)
+closeStroke.Color=C.red; closeStroke.Thickness=1; closeStroke.Transparency=0.4
+RegisterThemed(CloseBtn,    {TextColor3="red"})
+RegisterThemed(closeStroke, {Color="red"})
+
+CloseBtn.MouseButton1Click:Connect(function()
+    Tween(MainFrame,{Size=UDim2.new(0,420,0,0), Position=UDim2.new(
+        MainFrame.Position.X.Scale,
+        MainFrame.Position.X.Offset,
+        MainFrame.Position.Y.Scale,
+        MainFrame.Position.Y.Offset+27)}, tweenMed)
+    task.delay(0.3, function() MainFrame.Visible=false
+        MainFrame.Size=UDim2.new(0,420,0.93,0) end)
+    MenuBtn.Text="☰"
+    Tween(MenuBtn,  {BackgroundColor3=C.bg1,TextColor3=C.accent})
+    Tween(MenuBtnS, {Color=C.accent,Transparency=0.4})
+end)
+
+MinBtn.MouseButton1Click:Connect(function()
+    MainFrame.Visible=false
+    MenuBtn.Text="☰"
+    Tween(MenuBtn,  {BackgroundColor3=C.bg1,TextColor3=C.accent})
+    Tween(MenuBtnS, {Color=C.accent,Transparency=0.4})
+end)
+
+-- Header divider
+local hdrDiv=Instance.new("Frame",MainFrame)
+hdrDiv.Size=UDim2.new(0.92,0,0,1); hdrDiv.Position=UDim2.new(0.04,0,0,54)
+hdrDiv.BackgroundColor3=C.accent; hdrDiv.BackgroundTransparency=0.7
+hdrDiv.BorderSizePixel=0; hdrDiv.ZIndex=5
+RegisterThemed(hdrDiv,{BackgroundColor3="accent"})
+
+-- =================================================================
+-- SIDEBAR  (left panel — tabs)
+-- =================================================================
+local Sidebar = Instance.new("Frame",MainFrame)
+Sidebar.Name="Sidebar"
+Sidebar.Size=UDim2.new(0,120,1,-60)
+Sidebar.Position=UDim2.new(0,0,0,60)
+Sidebar.BackgroundColor3=C.bg1
+Sidebar.BorderSizePixel=0
+Sidebar.ZIndex=5
+Instance.new("UICorner",Sidebar).CornerRadius=UDim.new(0,20)
+local sideFix=Instance.new("Frame",Sidebar)
+sideFix.Size=UDim2.new(0.5,0,1,0); sideFix.Position=UDim2.new(0.5,0,0,0)
+sideFix.BackgroundColor3=C.bg1; sideFix.BorderSizePixel=0; sideFix.ZIndex=5
+RegisterThemed(Sidebar, {BackgroundColor3="bg1"})
+RegisterThemed(sideFix, {BackgroundColor3="bg1"})
+
+local SideLayout=Instance.new("UIListLayout",Sidebar)
+SideLayout.SortOrder=Enum.SortOrder.LayoutOrder
+SideLayout.Padding=UDim.new(0,4)
+local sidePad=Instance.new("UIPadding",Sidebar)
+sidePad.PaddingTop=UDim.new(0,10)
+sidePad.PaddingLeft=UDim.new(0,6)
+sidePad.PaddingRight=UDim.new(0,6)
+sidePad.PaddingBottom=UDim.new(0,10)
+
+-- Vertical divider between sidebar and content
+local sideDiv=Instance.new("Frame",MainFrame)
+sideDiv.Size=UDim2.new(0,1,1,-62); sideDiv.Position=UDim2.new(0,120,0,62)
+sideDiv.BackgroundColor3=C.accentDim; sideDiv.BackgroundTransparency=0.5
+sideDiv.BorderSizePixel=0; sideDiv.ZIndex=5
+RegisterThemed(sideDiv,{BackgroundColor3="accentDim"})
+
+-- =================================================================
+-- CONTENT PANEL  (right panel)
+-- =================================================================
+local ContentPanel=Instance.new("Frame",MainFrame)
+ContentPanel.Name="ContentPanel"
+ContentPanel.Size=UDim2.new(1,-126,1,-62)
+ContentPanel.Position=UDim2.new(0,124,0,62)
+ContentPanel.BackgroundTransparency=1
+ContentPanel.ZIndex=5
+
+-- =================================================================
+-- TAB SYSTEM
+-- =================================================================
+local tabs        = {}
+local tabPages    = {}
+local activeTab   = nil
+local tabBtns     = {}
+
+local function MakeTabPage()
+    local scroll = Instance.new("ScrollingFrame",ContentPanel)
+    scroll.Size=UDim2.new(1,0,1,0)
+    scroll.BackgroundTransparency=1
+    scroll.ScrollBarThickness=2
+    scroll.ScrollBarImageColor3=C.accentDim
+    scroll.CanvasSize=UDim2.new(0,0,0,0)
+    scroll.AutomaticCanvasSize=Enum.AutomaticSize.Y
+    scroll.ZIndex=6
+    scroll.Visible=false
+    local layout=Instance.new("UIListLayout",scroll)
+    layout.SortOrder=Enum.SortOrder.LayoutOrder
+    layout.Padding=UDim.new(0,6)
+    layout.HorizontalAlignment=Enum.HorizontalAlignment.Center
+    local pad=Instance.new("UIPadding",scroll)
+    pad.PaddingTop=UDim.new(0,8); pad.PaddingBottom=UDim.new(0,20)
+    pad.PaddingLeft=UDim.new(0,4); pad.PaddingRight=UDim.new(0,4)
+    RegisterThemed(scroll,{ScrollBarImageColor3="accentDim"})
+    return scroll
 end
 
--- Header
-do
-    local hdr = Instance.new("Frame", MainFrame)
-    hdr.Size             = UDim2.new(1, 0, 0, 62)
-    hdr.BackgroundColor3 = C.bg0
-    hdr.BorderSizePixel  = 0
-    hdr.ZIndex           = 5
-    Instance.new("UICorner", hdr).CornerRadius = UDim.new(0, 20)
-    local fix = Instance.new("Frame", hdr)
-    fix.Size = UDim2.new(1,0,0.5,0); fix.Position = UDim2.new(0,0,0.5,0)
-    fix.BackgroundColor3 = C.bg0; fix.BorderSizePixel = 0; fix.ZIndex = 5
-    local bar = Instance.new("Frame", hdr)
-    bar.Size = UDim2.new(0,3,0.5,0); bar.Position = UDim2.new(0,12,0.25,0)
-    bar.BackgroundColor3 = C.accent; bar.BorderSizePixel = 0; bar.ZIndex = 6
-    Instance.new("UICorner", bar).CornerRadius = UDim.new(0,4)
-    local grad = Instance.new("UIGradient", hdr)
-    grad.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(12,30,60)),
-        ColorSequenceKeypoint.new(1, C.bg0),
-    }); grad.Rotation = 0
-    local title = Instance.new("TextLabel", hdr)
-    title.Size = UDim2.new(1,-26,0,26); title.Position = UDim2.new(0,22,0,8)
-    title.BackgroundTransparency = 1; title.Font = Enum.Font.GothamBold
-    title.Text = "Afridi Utility"; title.TextColor3 = C.textHi
-    title.TextSize = 15; title.TextXAlignment = Enum.TextXAlignment.Left; title.ZIndex = 7
-    local sub = Instance.new("TextLabel", hdr)
-    sub.Size = UDim2.new(1,-26,0,16); sub.Position = UDim2.new(0,22,0,32)
-    sub.BackgroundTransparency = 1; sub.Font = Enum.Font.Gotham
-    sub.Text = "V6  ·  Ultra FPS Edition"; sub.TextColor3 = C.orange
-    sub.TextSize = 10; sub.TextXAlignment = Enum.TextXAlignment.Left; sub.ZIndex = 7
-    local div = Instance.new("Frame", MainFrame)
-    div.Size = UDim2.new(0.9,0,0,1); div.Position = UDim2.new(0.05,0,0,63)
-    div.BackgroundColor3 = C.accent; div.BackgroundTransparency = 0.65
-    div.BorderSizePixel = 0; div.ZIndex = 5
+local function MakeTabBtn(icon, label, order)
+    local btn=Instance.new("TextButton",Sidebar)
+    btn.Size=UDim2.new(1,0,0,52)
+    btn.BackgroundColor3=C.bg2
+    btn.Font=Enum.Font.GothamBold
+    btn.Text=icon.."\n"..label
+    btn.TextColor3=C.textDim
+    btn.TextSize=10
+    btn.LayoutOrder=order
+    btn.ZIndex=7
+    btn.TextWrapped=true
+    Instance.new("UICorner",btn).CornerRadius=UDim.new(0,10)
+    local s=Instance.new("UIStroke",btn)
+    s.Color=C.accentDim; s.Thickness=1; s.Transparency=0.8
+    RegisterThemed(btn,{BackgroundColor3="bg2", TextColor3="textDim"})
+    RegisterThemed(s,  {Color="accentDim"})
+    return btn, s
 end
 
--- Scroll frame
-local ScrollFrame = Instance.new("ScrollingFrame", MainFrame)
-do
-    ScrollFrame.Size                   = UDim2.new(1, 0, 1, -68)
-    ScrollFrame.Position               = UDim2.new(0, 0, 0, 68)
-    ScrollFrame.BackgroundTransparency = 1
-    ScrollFrame.ScrollBarThickness     = 2
-    ScrollFrame.ScrollBarImageColor3   = C.accentDim
-    ScrollFrame.CanvasSize             = UDim2.new(0, 0, 0, 0)
-    ScrollFrame.AutomaticCanvasSize    = Enum.AutomaticSize.Y
-    ScrollFrame.ZIndex                 = 5
-    local layout = Instance.new("UIListLayout", ScrollFrame)
-    layout.SortOrder = Enum.SortOrder.LayoutOrder
-    layout.Padding   = UDim.new(0, 5)
-    layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-    local pad = Instance.new("UIPadding", ScrollFrame)
-    pad.PaddingTop = UDim.new(0,8); pad.PaddingBottom = UDim.new(0,22)
+local function SwitchTab(name)
+    for n, page in pairs(tabPages) do
+        if n == name then
+            page.Visible=true
+            Tween(page,{GroupTransparency=0})
+        else
+            page.Visible=false
+        end
+    end
+    for n, data in pairs(tabBtns) do
+        if n == name then
+            Tween(data.btn,{BackgroundColor3=C.bg2h, TextColor3=C.textHi})
+            Tween(data.stroke,{Color=C.accent, Transparency=0.1})
+            -- Slide-in indicator
+            if data.indicator then
+                Tween(data.indicator,{BackgroundTransparency=0}, tweenMed)
+            end
+        else
+            Tween(data.btn,{BackgroundColor3=C.bg2, TextColor3=C.textDim})
+            Tween(data.stroke,{Color=C.accentDim, Transparency=0.8})
+            if data.indicator then
+                Tween(data.indicator,{BackgroundTransparency=1})
+            end
+        end
+    end
+    activeTab=name
+end
+
+local function RegisterTab(name, icon, label, order)
+    local page = MakeTabPage()
+    local btn, stroke = MakeTabBtn(icon, label, order)
+    -- Active indicator bar (left edge)
+    local indicator=Instance.new("Frame",btn)
+    indicator.Size=UDim2.new(0,3,0.6,0); indicator.Position=UDim2.new(0,0,0.2,0)
+    indicator.BackgroundColor3=C.accent; indicator.BackgroundTransparency=1
+    indicator.BorderSizePixel=0; indicator.ZIndex=8
+    Instance.new("UICorner",indicator).CornerRadius=UDim.new(0,4)
+    RegisterThemed(indicator,{BackgroundColor3="accent"})
+    tabPages[name]=page
+    tabBtns[name]={btn=btn, stroke=stroke, indicator=indicator}
+    btn.MouseButton1Click:Connect(function() SwitchTab(name) end)
+    return page
 end
 
 -- =================================================================
--- FACTORIES
+-- CONTENT FACTORIES  (items go into tab pages)
 -- =================================================================
-local function SectionLabel(text, order)
-    local row = Instance.new("Frame", ScrollFrame)
-    row.Size = UDim2.new(0,232,0,20); row.BackgroundTransparency = 1
-    row.LayoutOrder = order; row.ZIndex = 5
-    local line = Instance.new("Frame", row)
-    line.Size = UDim2.new(1,0,0,1); line.Position = UDim2.new(0,0,0.5,0)
-    line.BackgroundColor3 = C.accentDim; line.BackgroundTransparency = 0.6
-    line.BorderSizePixel = 0; line.ZIndex = 5
-    local lbl = Instance.new("TextLabel", row)
-    lbl.Size = UDim2.new(0,0,1,0); lbl.AutomaticSize = Enum.AutomaticSize.X
-    lbl.Position = UDim2.new(0,8,0,0); lbl.BackgroundColor3 = C.bg1
-    lbl.Font = Enum.Font.GothamBold; lbl.Text = "  "..text.."  "
-    lbl.TextColor3 = C.textDim; lbl.TextSize = 10; lbl.ZIndex = 6
-    return row
+local function SectionLabel(parent, text, order)
+    local row=Instance.new("Frame",parent)
+    row.Size=UDim2.new(1,-8,0,22); row.BackgroundTransparency=1
+    row.LayoutOrder=order; row.ZIndex=6
+    local line=Instance.new("Frame",row)
+    line.Size=UDim2.new(1,0,0,1); line.Position=UDim2.new(0,0,0.5,0)
+    line.BackgroundColor3=C.accentDim; line.BackgroundTransparency=0.55
+    line.BorderSizePixel=0; line.ZIndex=6
+    RegisterThemed(line,{BackgroundColor3="accentDim"})
+    local bg=Instance.new("Frame",row)
+    bg.Size=UDim2.new(0,0,1,0); bg.AutomaticSize=Enum.AutomaticSize.X
+    bg.Position=UDim2.new(0,6,0,0)
+    bg.BackgroundColor3=C.bg0; bg.BorderSizePixel=0; bg.ZIndex=7
+    RegisterThemed(bg,{BackgroundColor3="bg0"})
+    local lbl=Instance.new("TextLabel",bg)
+    lbl.Size=UDim2.new(0,0,1,0); lbl.AutomaticSize=Enum.AutomaticSize.X
+    lbl.BackgroundTransparency=1; lbl.Font=Enum.Font.GothamBold
+    lbl.Text="  "..text.."  "; lbl.TextColor3=C.accent
+    lbl.TextSize=10; lbl.ZIndex=8
+    RegisterThemed(lbl,{TextColor3="accent"})
 end
 
-local function MakeButton(name, text, accentCol, order)
-    local btn    = Instance.new("TextButton", ScrollFrame)
-    local stroke = Instance.new("UIStroke", btn)
-    btn.Name = name; btn.Size = UDim2.new(0,232,0,40)
-    btn.BackgroundColor3 = C.bg2; btn.Font = Enum.Font.GothamBold
-    btn.Text = text; btn.TextColor3 = C.textMid; btn.TextSize = 12
-    btn.LayoutOrder = order; btn.ZIndex = 5
-    Instance.new("UICorner", btn).CornerRadius = UDim.new(0,11)
-    stroke.Color = accentCol or C.accent; stroke.Thickness = 1.2; stroke.Transparency = 0.5
+local function MakeBtn(parent, name, text, accentCol, order)
+    local btn=Instance.new("TextButton",parent)
+    local stroke=Instance.new("UIStroke",btn)
+    btn.Name=name; btn.Size=UDim2.new(1,-8,0,40)
+    btn.BackgroundColor3=C.bg2; btn.Font=Enum.Font.GothamBold
+    btn.Text=text; btn.TextColor3=C.textMid; btn.TextSize=12
+    btn.LayoutOrder=order; btn.ZIndex=6
+    Instance.new("UICorner",btn).CornerRadius=UDim.new(0,11)
+    stroke.Color=accentCol or C.accent; stroke.Thickness=1.2; stroke.Transparency=0.5
     btn.MouseEnter:Connect(function()
         Tween(stroke,{Transparency=0.1}); Tween(btn,{BackgroundColor3=C.bg2h})
     end)
     btn.MouseLeave:Connect(function()
         Tween(stroke,{Transparency=0.5}); Tween(btn,{BackgroundColor3=C.bg2})
     end)
+    RegisterThemed(btn,   {BackgroundColor3="bg2", TextColor3="textMid"})
+    RegisterThemed(stroke,{Color= accentCol and "accent" or "accent"})
     return btn, stroke
 end
 
-local function MakeGoldButton(name, text, order)
-    local btn, stroke = MakeButton(name, text, C.gold, order)
-    btn.BackgroundColor3 = Color3.fromRGB(24,20,8); btn.TextColor3 = C.textGold
-    stroke.Color = C.gold
-    btn.MouseEnter:Connect(function() btn.BackgroundColor3 = Color3.fromRGB(34,28,10) end)
-    btn.MouseLeave:Connect(function() btn.BackgroundColor3 = Color3.fromRGB(24,20,8) end)
-    return btn, stroke
-end
+local speedSliderUpdate=nil
+local function MakeSlider(parent, name, text, minV, maxV, default, order, callback)
+    local frame=Instance.new("Frame",parent)
+    frame.Name=name; frame.Size=UDim2.new(1,-8,0,56)
+    frame.BackgroundColor3=C.bg2; frame.LayoutOrder=order; frame.ZIndex=6
+    Instance.new("UICorner",frame).CornerRadius=UDim.new(0,11)
+    local fStroke=Instance.new("UIStroke",frame)
+    fStroke.Color=C.accentDim; fStroke.Thickness=1.1; fStroke.Transparency=0.6
+    RegisterThemed(frame, {BackgroundColor3="bg2"})
+    RegisterThemed(fStroke,{Color="accentDim"})
 
-local function MakePurpleButton(name, text, order)
-    local btn, stroke = MakeButton(name, text, C.purple, order)
-    btn.BackgroundColor3 = Color3.fromRGB(18,12,32); btn.TextColor3 = C.textPurple
-    stroke.Color = C.purple
-    btn.MouseEnter:Connect(function() btn.BackgroundColor3 = Color3.fromRGB(28,18,48) end)
-    btn.MouseLeave:Connect(function() btn.BackgroundColor3 = Color3.fromRGB(18,12,32) end)
-    return btn, stroke
-end
+    local title=Instance.new("TextLabel",frame)
+    title.Size=UDim2.new(1,-10,0,22); title.Position=UDim2.new(0,10,0,4)
+    title.BackgroundTransparency=1; title.Font=Enum.Font.GothamBold
+    title.Text=text..":  "..default; title.TextColor3=C.textMid
+    title.TextSize=11; title.TextXAlignment=Enum.TextXAlignment.Left; title.ZIndex=7
+    RegisterThemed(title,{TextColor3="textMid"})
 
-local function MakeOrangeButton(name, text, order)
-    local btn, stroke = MakeButton(name, text, C.orange, order)
-    btn.BackgroundColor3 = Color3.fromRGB(28,14,4); btn.TextColor3 = C.textOrange
-    stroke.Color = C.orange
-    btn.MouseEnter:Connect(function() btn.BackgroundColor3 = Color3.fromRGB(40,20,6) end)
-    btn.MouseLeave:Connect(function() btn.BackgroundColor3 = Color3.fromRGB(28,14,4) end)
-    return btn, stroke
-end
+    -- Value badge
+    local valBadge=Instance.new("TextLabel",frame)
+    valBadge.Size=UDim2.new(0,50,0,20); valBadge.Position=UDim2.new(1,-58,0,4)
+    valBadge.BackgroundColor3=C.bg0; valBadge.Font=Enum.Font.GothamBold
+    valBadge.Text=tostring(default); valBadge.TextColor3=C.accent
+    valBadge.TextSize=11; valBadge.ZIndex=7; valBadge.TextXAlignment=Enum.TextXAlignment.Center
+    Instance.new("UICorner",valBadge).CornerRadius=UDim.new(0,6)
+    RegisterThemed(valBadge,{BackgroundColor3="bg0", TextColor3="accent"})
 
-local function MakeStatusLabel(text, order)
-    local lbl = Instance.new("TextLabel", ScrollFrame)
-    lbl.Size = UDim2.new(0,232,0,22); lbl.BackgroundTransparency = 1
-    lbl.Font = Enum.Font.Gotham; lbl.Text = text
-    lbl.TextColor3 = C.textDim; lbl.TextSize = 10
-    lbl.TextXAlignment = Enum.TextXAlignment.Center
-    lbl.LayoutOrder = order; lbl.ZIndex = 5
-    return lbl
-end
+    local track=Instance.new("Frame",frame)
+    track.Size=UDim2.new(1,-20,0,6); track.Position=UDim2.new(0,10,0,40)
+    track.BackgroundColor3=Color3.fromRGB(28,30,50); track.ZIndex=7
+    Instance.new("UICorner",track).CornerRadius=UDim.new(0,3)
 
-local speedSliderUpdate = nil
-local function MakeSlider(name, text, minV, maxV, default, order, callback)
-    local frame = Instance.new("Frame", ScrollFrame)
-    frame.Name = name; frame.Size = UDim2.new(0,232,0,54)
-    frame.BackgroundColor3 = C.bg2; frame.LayoutOrder = order; frame.ZIndex = 5
-    Instance.new("UICorner", frame).CornerRadius = UDim.new(0,11)
-    local fStroke = Instance.new("UIStroke", frame)
-    fStroke.Color = C.accentDim; fStroke.Thickness = 1.1; fStroke.Transparency = 0.6
-    local title = Instance.new("TextLabel", frame)
-    title.Size = UDim2.new(1,-10,0,22); title.Position = UDim2.new(0,10,0,4)
-    title.BackgroundTransparency = 1; title.Font = Enum.Font.GothamBold
-    title.Text = text..":  "..default; title.TextColor3 = C.textMid
-    title.TextSize = 11; title.TextXAlignment = Enum.TextXAlignment.Left; title.ZIndex = 6
-    local track = Instance.new("Frame", frame)
-    track.Size = UDim2.new(0,208,0,6); track.Position = UDim2.new(0.5,-104,0,37)
-    track.BackgroundColor3 = Color3.fromRGB(28,30,50); track.ZIndex = 6
-    Instance.new("UICorner", track).CornerRadius = UDim.new(0,3)
-    local sliderMax = maxV
-    local unit0 = math.clamp((default-minV)/(sliderMax-minV),0,1)
-    local curVal = default
-    local bar = Instance.new("Frame", track)
-    bar.Size = UDim2.new(unit0,0,1,0); bar.BackgroundColor3 = C.accent; bar.ZIndex = 7
-    Instance.new("UICorner", bar).CornerRadius = UDim.new(0,3)
-    local dot = Instance.new("Frame", track)
-    dot.Size = UDim2.new(0,14,0,14); dot.Position = UDim2.new(unit0,-7,0.5,-7)
-    dot.BackgroundColor3 = C.textHi; dot.ZIndex = 8
-    Instance.new("UICorner", dot).CornerRadius = UDim.new(0,7)
-    local snap = false
+    local sliderMax=maxV; local unit0=math.clamp((default-minV)/(sliderMax-minV),0,1)
+    local curVal=default
+
+    local bar=Instance.new("Frame",track)
+    bar.Size=UDim2.new(unit0,0,1,0); bar.BackgroundColor3=C.accent; bar.ZIndex=8
+    Instance.new("UICorner",bar).CornerRadius=UDim.new(0,3)
+    RegisterThemed(bar,{BackgroundColor3="accent"})
+
+    local dot=Instance.new("Frame",track)
+    dot.Size=UDim2.new(0,16,0,16); dot.Position=UDim2.new(unit0,-8,0.5,-8)
+    dot.BackgroundColor3=C.textHi; dot.ZIndex=9
+    Instance.new("UICorner",dot).CornerRadius=UDim.new(0,8)
+    RegisterThemed(dot,{BackgroundColor3="textHi"})
+
+    local snap=false
     local function updateSlider(input)
-        local u = math.clamp(
-            (input.Position.X-track.AbsolutePosition.X)/track.AbsoluteSize.X,0,1)
-        curVal = math.floor(minV+(sliderMax-minV)*u)
-        title.Text = text..":  "..curVal
-        bar.Size = UDim2.new(u,0,1,0); dot.Position = UDim2.new(u,-7,0.5,-7)
+        local u=math.clamp((input.Position.X-track.AbsolutePosition.X)/track.AbsoluteSize.X,0,1)
+        curVal=math.floor(minV+(sliderMax-minV)*u)
+        title.Text=text..":  "..curVal; valBadge.Text=tostring(curVal)
+        bar.Size=UDim2.new(u,0,1,0); dot.Position=UDim2.new(u,-8,0.5,-8)
         callback(curVal)
     end
     track.InputBegan:Connect(function(inp)
-        if inp.UserInputType == Enum.UserInputType.MouseButton1
-        or inp.UserInputType == Enum.UserInputType.Touch then
-            snap = true; updateSlider(inp) end
+        if inp.UserInputType==Enum.UserInputType.MouseButton1
+        or inp.UserInputType==Enum.UserInputType.Touch then
+            snap=true; updateSlider(inp) end
     end)
     UIS.InputChanged:Connect(function(inp)
         if not snap then return end
-        if inp.UserInputType == Enum.UserInputType.MouseMovement
-        or inp.UserInputType == Enum.UserInputType.Touch then updateSlider(inp) end
+        if inp.UserInputType==Enum.UserInputType.MouseMovement
+        or inp.UserInputType==Enum.UserInputType.Touch then updateSlider(inp) end
     end)
     UIS.InputEnded:Connect(function(inp)
-        if inp.UserInputType == Enum.UserInputType.MouseButton1
-        or inp.UserInputType == Enum.UserInputType.Touch then snap = false end
+        if inp.UserInputType==Enum.UserInputType.MouseButton1
+        or inp.UserInputType==Enum.UserInputType.Touch then snap=false end
     end)
-    if name == "SpeedSlider" then
-        speedSliderUpdate = function(newMax)
-            sliderMax = newMax
-            if curVal > sliderMax then curVal = sliderMax end
-            local u = math.clamp((curVal-minV)/(sliderMax-minV),0,1)
-            title.Text = text..":  "..curVal
-            bar.Size = UDim2.new(u,0,1,0); dot.Position = UDim2.new(u,-7,0.5,-7)
+    if name=="SpeedSlider" then
+        speedSliderUpdate=function(newMax)
+            sliderMax=newMax
+            if curVal>sliderMax then curVal=sliderMax end
+            local u=math.clamp((curVal-minV)/(sliderMax-minV),0,1)
+            title.Text=text..":  "..curVal; valBadge.Text=tostring(curVal)
+            bar.Size=UDim2.new(u,0,1,0); dot.Position=UDim2.new(u,-8,0.5,-8)
             callback(curVal)
         end
     end
 end
 
--- =================================================================
--- BUILD MENU ITEMS
--- =================================================================
-SectionLabel("PLATFORM", 0)
-local PlatformBtn,  PlatformBtnS  = MakeButton("PlatformBtn",     "Platform: OFF",        C.accent, 1)
-local CollideBtn,   CollideBtnS   = MakeButton("ToggleCollideBtn", "Platform Collide: ON", C.green,  2)
+local function MakeStatusLbl(parent, text, order)
+    local lbl=Instance.new("TextLabel",parent)
+    lbl.Size=UDim2.new(1,-8,0,22); lbl.BackgroundTransparency=1
+    lbl.Font=Enum.Font.Gotham; lbl.Text=text
+    lbl.TextColor3=C.textDim; lbl.TextSize=10
+    lbl.TextXAlignment=Enum.TextXAlignment.Center
+    lbl.LayoutOrder=order; lbl.ZIndex=6
+    RegisterThemed(lbl,{TextColor3="textDim"})
+    return lbl
+end
 
-SectionLabel("MOVEMENT", 100)
-local AirJumpBtn,   AirJumpBtnS   = MakeButton("AirJumpBtn",      "Air Jump: OFF",        C.accent, 101)
-local NoclipBtn,    NoclipBtnS    = MakeButton("NoclipBtn",       "Noclip: OFF",           C.accent, 102)
-local FlyBtn,       FlyBtnS       = MakeButton("FlyBtn",          "Fly: OFF",              C.accent, 103)
-local ExtremeBtn,   ExtremeBtnS   = MakeButton("ExtremeSpeedBtn", "Extreme Speed: OFF",    C.accent, 104)
-local SpeedLockBtn, SpeedLockBtnS = MakeButton("SpeedLockBtn",    "Speed Lock: OFF",       C.accent, 105)
+-- =================================================================
+-- CREATE TABS
+-- =================================================================
+local pgMove  = RegisterTab("Movement",    "🏃",  "Movement",    1)
+local pgVisual= RegisterTab("Visual",      "👁",  "Visual",      2)
+local pgCam   = RegisterTab("Camera",      "🎥",  "Camera",      3)
+local pgOpt   = RegisterTab("Optim",       "⚙️",  "Optimize",    4)
+local pgTroll = RegisterTab("Troll",       "💀",  "Troll",       5)
+local pgUI    = RegisterTab("UI",          "🧠",  "UI",          6)
 
-SectionLabel("SLIDERS", 150)
-MakeSlider("SpeedSlider",    "WalkSpeed",  16,  500, 16, 151, function(v)
-    currentSpeed = v
-    local h = GetHumanoid()
-    if h and not isGoingToTarget and not autoFarmEnabled then h.WalkSpeed = v end
+-- =================================================================
+-- MOVEMENT TAB
+-- =================================================================
+SectionLabel(pgMove,  "MOVEMENT", 0)
+local AirJumpBtn,   AirJumpBtnS   = MakeBtn(pgMove, "AirJumpBtn",      "↑  Air Jump: OFF",        C.accent, 1)
+local NoclipBtn,    NoclipBtnS    = MakeBtn(pgMove, "NoclipBtn",       "👻  Noclip: OFF",          C.accent, 2)
+local FlyBtn,       FlyBtnS       = MakeBtn(pgMove, "FlyBtn",          "✈  Fly: OFF",              C.accent, 3)
+local ExtremeBtn,   ExtremeBtnS   = MakeBtn(pgMove, "ExtremeSpeedBtn", "⚡  Extreme Speed: OFF",   C.accent, 4)
+local SpeedLockBtn, SpeedLockBtnS = MakeBtn(pgMove, "SpeedLockBtn",    "🔒  Speed Lock: OFF",      C.accent, 5)
+
+SectionLabel(pgMove, "SLIDERS", 50)
+MakeSlider(pgMove, "SpeedSlider",    "WalkSpeed",  16,  500, 16, 51, function(v)
+    currentSpeed=v
+    local h=GetHumanoid()
+    if h and not isGoingToTarget and not autoFarmEnabled then h.WalkSpeed=v end
 end)
-MakeSlider("JumpSlider",     "JumpPower",  50,  300, 50, 152, function(v)
-    currentJump = v
-    local h = GetHumanoid()
-    if h then h.UseJumpPower = true; h.JumpPower = v end
-end)
-MakeSlider("FastWalkSlider", "GoTo Speed", 16,  300, 32, 153, function(v)
-    fastWalkSpeed = v
+MakeSlider(pgMove, "JumpSlider",     "JumpPower",  50,  300, 50, 52, function(v)
+    currentJump=v
+    local h=GetHumanoid()
+    if h then h.UseJumpPower=true; h.JumpPower=v end
 end)
 
-SectionLabel("NAVIGATION", 200)
-local MarkBtn, MarkBtnS = MakeButton("MarkLocationBtn", "Mark Location: OFF", C.gold,   201)
-local GoBtn,   GoBtnS   = MakeButton("GoToTargetBtn",   "Go to Target",       C.accent, 202)
+SectionLabel(pgMove, "NAVIGATION", 100)
+local MarkBtn, MarkBtnS = MakeBtn(pgMove,"MarkLocationBtn","📍  Mark Location: OFF",C.gold,  101)
+local GoBtn,   GoBtnS   = MakeBtn(pgMove,"GoToTargetBtn",  "🚶  Go to Target",      C.accent,102)
+MakeSlider(pgMove, "FastWalkSlider","GoTo Speed",16,300,32,103, function(v) fastWalkSpeed=v end)
 
-SectionLabel("AUTO FARM", 300)
-local FarmMarkBtn,   FarmMarkBtnS   = MakeGoldButton("FarmMarkBtn",   "🎯  Mark Farm Spot", 301)
-local FarmToggleBtn, FarmToggleBtnS = MakeGoldButton("FarmToggleBtn", "⚙️  AutoFarm: OFF",  302)
-local FarmStatusLbl                 = MakeStatusLabel("No spot marked yet", 303)
-
-SectionLabel("FAKE BLOCK ESP", 400)
-local FakeESPBtn,  FakeESPBtnS  = MakePurpleButton("FakeESPBtn", "👻  Fake Block ESP: OFF", 401)
-local espInfoLbl  = MakeStatusLabel("Highlights non-collidable blocks", 402)
-local espCountLbl = MakeStatusLabel("Blocks found: —", 403)
-espInfoLbl.TextSize = 10
-
-SectionLabel("VISUALS", 500)
-local FPSBtn,    FPSBtnS    = MakeButton("FPSBoostBtn",   "FPS Boost: OFF",   C.accent, 501)
-local BrightBtn, BrightBtnS = MakeButton("FullBrightBtn", "Full Bright: OFF", C.accent, 502)
-local ESPBtn,    ESPBtnS    = MakeButton("ESPBtn",        "Player ESP: OFF",  C.accent, 503)
-
-SectionLabel("ULTRA PERFORMANCE", 600)
-local UltraFPSBtn, UltraFPSBtnS = MakeOrangeButton("UltraFPSBtn", "⚡  Ultra FPS Boost: OFF", 601)
-local ultraWarnLbl  = MakeStatusLabel("⚠  Will unload ALL game content", 602)
-local ultraWarnLbl2 = MakeStatusLabel("Breaks visuals — cannot be undone", 603)
-ultraWarnLbl.TextColor3  = Color3.fromRGB(255, 120, 50)
-ultraWarnLbl2.TextColor3 = Color3.fromRGB(180, 80, 30)
-ultraWarnLbl2.TextSize   = 9
+SectionLabel(pgMove, "AUTO FARM", 150)
+local FarmMarkBtn,   FarmMarkBtnS   = MakeBtn(pgMove,"FarmMarkBtn",   "🎯  Mark Farm Spot", C.gold,  151)
+local FarmToggleBtn, FarmToggleBtnS = MakeBtn(pgMove,"FarmToggleBtn", "⚙️  AutoFarm: OFF",  C.gold,  152)
+local FarmStatusLbl                 = MakeStatusLbl(pgMove,"No spot marked yet",153)
 
 -- =================================================================
--- WARNING POPUP (Ultra FPS)
+-- VISUAL TAB
 -- =================================================================
-local WarnPopup = Instance.new("Frame", ScreenGui)
-do
-    WarnPopup.Name             = "UltraFPSWarning"
-    WarnPopup.Size             = UDim2.new(0, 270, 0, 230)
-    WarnPopup.Position         = UDim2.new(0.5, -135, 0.5, -115)
-    WarnPopup.BackgroundColor3 = Color3.fromRGB(14, 8, 4)
-    WarnPopup.BorderSizePixel  = 0
-    WarnPopup.ZIndex           = 20
-    WarnPopup.Visible          = false
-    Instance.new("UICorner", WarnPopup).CornerRadius = UDim.new(0, 16)
-    local ws = Instance.new("UIStroke", WarnPopup)
-    ws.Color = C.orange; ws.Thickness = 2; ws.Transparency = 0.1
+SectionLabel(pgVisual, "ESP", 0)
+local ESPBtn,      ESPBtnS      = MakeBtn(pgVisual,"ESPBtn",      "👤  Player ESP: OFF",      C.red,    1)
+local FakeESPBtn,  FakeESPBtnS  = MakeBtn(pgVisual,"FakeESPBtn",  "👻  Fake Block ESP: OFF",  C.purple, 2)
+local espCountLbl               = MakeStatusLbl(pgVisual,"Blocks found: —",3)
+local SeeThruBtn,  SeeThruBtnS  = MakeBtn(pgVisual,"SeeThruBtn",  "🔍  See Through Walls: OFF",C.purple,4)
 
-    -- Header bar
-    local hbar = Instance.new("Frame", WarnPopup)
-    hbar.Size = UDim2.new(1,0,0,44); hbar.BackgroundColor3 = Color3.fromRGB(28,12,4)
-    hbar.BorderSizePixel = 0; hbar.ZIndex = 21
-    Instance.new("UICorner", hbar).CornerRadius = UDim.new(0,16)
-    local hfix = Instance.new("Frame", hbar)
-    hfix.Size = UDim2.new(1,0,0.5,0); hfix.Position = UDim2.new(0,0,0.5,0)
-    hfix.BackgroundColor3 = Color3.fromRGB(28,12,4); hfix.BorderSizePixel = 0; hfix.ZIndex = 21
-    local htitle = Instance.new("TextLabel", hbar)
-    htitle.Size = UDim2.new(1,0,1,0); htitle.BackgroundTransparency = 1
-    htitle.Font = Enum.Font.GothamBold; htitle.Text = "⚡  ULTRA FPS BOOST  ⚡"
-    htitle.TextColor3 = C.orange; htitle.TextSize = 13; htitle.ZIndex = 22
+SectionLabel(pgVisual, "LIGHTING", 50)
+local BrightBtn,   BrightBtnS   = MakeBtn(pgVisual,"FullBrightBtn","☀  Full Bright: OFF",     C.accent, 51)
+local FPSBtn,      FPSBtnS      = MakeBtn(pgVisual,"FPSBoostBtn",  "🚀  FPS Boost: OFF",       C.accent, 52)
 
-    -- Warning lines
-    local lines = {
-        {"⚠  THIS WILL PERMANENTLY UNLOAD:", Color3.fromRGB(255,160,60), true},
-        {"• All Textures & Decals",           Color3.fromRGB(220,140,70), false},
-        {"• All Particles, Fire & Smoke",      Color3.fromRGB(220,140,70), false},
-        {"• All Sounds (volume → 0)",          Color3.fromRGB(220,140,70), false},
-        {"• All Shadows & Fog",                Color3.fromRGB(220,140,70), false},
-        {"• Sky, Atmosphere & Post FX",        Color3.fromRGB(220,140,70), false},
-        {"• All Trails, Beams & Billboards",   Color3.fromRGB(220,140,70), false},
-        {"",                                   C.textDim,                  false},
-        {"Cannot be undone until rejoin.",     Color3.fromRGB(255,80,80),  true},
-    }
-    for i, line in ipairs(lines) do
-        local lbl = Instance.new("TextLabel", WarnPopup)
-        lbl.Size = UDim2.new(1,-20,0,16); lbl.Position = UDim2.new(0,10,0,40+(i-1)*19)
-        lbl.BackgroundTransparency = 1
-        lbl.Font = line[3] and Enum.Font.GothamBold or Enum.Font.Gotham
-        lbl.Text = line[1]; lbl.TextColor3 = line[2]; lbl.TextSize = 10
-        lbl.TextXAlignment = Enum.TextXAlignment.Left; lbl.ZIndex = 22
-    end
+SectionLabel(pgVisual, "ULTRA PERFORMANCE", 100)
+local UltraFPSBtn, UltraFPSBtnS = MakeBtn(pgVisual,"UltraFPSBtn","⚡  Ultra FPS Boost: OFF",  C.orange, 101)
+local ultraWarnLbl  = MakeStatusLbl(pgVisual,"⚠  Will unload ALL game content",102)
+local ultraWarnLbl2 = MakeStatusLbl(pgVisual,"Breaks visuals — cannot be undone",103)
+ultraWarnLbl.TextColor3  = Color3.fromRGB(255,120,50)
+ultraWarnLbl2.TextColor3 = Color3.fromRGB(180,80,30)
 
-    -- Buttons row
-    local confirmBtn = Instance.new("TextButton", WarnPopup)
-    confirmBtn.Size = UDim2.new(0,114,0,36); confirmBtn.Position = UDim2.new(0,12,1,-46)
-    confirmBtn.BackgroundColor3 = Color3.fromRGB(180,50,10)
-    confirmBtn.Font = Enum.Font.GothamBold; confirmBtn.Text = "✓  Activate"
-    confirmBtn.TextColor3 = Color3.fromRGB(255,220,200); confirmBtn.TextSize = 13
-    confirmBtn.ZIndex = 22
-    Instance.new("UICorner", confirmBtn).CornerRadius = UDim.new(0,10)
-    local cs = Instance.new("UIStroke", confirmBtn)
-    cs.Color = C.orange; cs.Thickness = 1.2; cs.Transparency = 0.3
+-- =================================================================
+-- CAMERA TAB
+-- =================================================================
+SectionLabel(pgCam, "CAMERA", 0)
+local FreecamBtn, FreecamBtnS = MakeBtn(pgCam,"FreecamBtn","🎥  Freecam: OFF",   C.accent, 1)
+local FOVBtn,     FOVBtnS     = MakeBtn(pgCam,"FOVBtn",    "🔭  FOV Unlock: OFF", C.accent, 2)
+MakeSlider(pgCam,"FOVSlider","FOV",30,120,70,3,function(v)
+    if fovEnabled then workspace.CurrentCamera.FieldOfView=v end
+    originalFOV=v
+end)
+local camStatusLbl = MakeStatusLbl(pgCam,"Freecam: WASD + mouse to fly",4)
+camStatusLbl.TextColor3=C.textDim
 
-    local cancelBtn = Instance.new("TextButton", WarnPopup)
-    cancelBtn.Size = UDim2.new(0,114,0,36); cancelBtn.Position = UDim2.new(1,-126,1,-46)
-    cancelBtn.BackgroundColor3 = C.bg2
-    cancelBtn.Font = Enum.Font.GothamBold; cancelBtn.Text = "✕  Cancel"
-    cancelBtn.TextColor3 = C.textMid; cancelBtn.TextSize = 13; cancelBtn.ZIndex = 22
-    Instance.new("UICorner", cancelBtn).CornerRadius = UDim.new(0,10)
+-- =================================================================
+-- OPTIMIZATION TAB
+-- =================================================================
+SectionLabel(pgOpt,"PLATFORM",0)
+local PlatformBtn,  PlatformBtnS  = MakeBtn(pgOpt,"PlatformBtn",    "⬛  Platform: OFF",       C.accent, 1)
+local CollideBtn,   CollideBtnS   = MakeBtn(pgOpt,"ToggleCollideBtn","↕  Platform Collide: ON", C.green,  2)
 
-    cancelBtn.MouseButton1Click:Connect(function()
-        WarnPopup.Visible = false; ultraFPSWarning = false
-        UltraFPSBtn.Text = "⚡  Ultra FPS Boost: OFF"
-        ultraWarnLbl.Text       = "⚠  Will unload ALL game content"
-        ultraWarnLbl.TextColor3 = Color3.fromRGB(255,120,50)
-        ultraWarnLbl2.Text      = "Breaks visuals — cannot be undone"
-        ultraWarnLbl2.TextColor3 = Color3.fromRGB(180,80,30)
-    end)
+SectionLabel(pgOpt,"PERFORMANCE",50)
+local FPSBtn2,     FPSBtn2S     = MakeBtn(pgOpt,"FPSBoostBtn2",  "🚀  FPS Boost",            C.accent, 51)
+local UltraBtn2,   UltraBtn2S   = MakeBtn(pgOpt,"UltraFPS2",     "⚡  Ultra FPS",             C.orange, 52)
 
-    confirmBtn.MouseButton1Click:Connect(function()
-        ultraFPSActive = true; WarnPopup.Visible = false
+-- =================================================================
+-- TROLL TAB
+-- =================================================================
+SectionLabel(pgTroll,"SELECT PLAYER",0)
+local playerListFrame=Instance.new("Frame",pgTroll)
+playerListFrame.Size=UDim2.new(1,-8,0,0)
+playerListFrame.AutomaticSize=Enum.AutomaticSize.Y
+playerListFrame.BackgroundTransparency=1
+playerListFrame.LayoutOrder=1; playerListFrame.ZIndex=6
+local playerListLayout=Instance.new("UIListLayout",playerListFrame)
+playerListLayout.Padding=UDim.new(0,4)
+playerListLayout.HorizontalAlignment=Enum.HorizontalAlignment.Center
 
-        UltraFPSBtn.Text = "⚡  Ultra FPS Boost: ON"
-        Tween(UltraFPSBtnS, {Color=C.green, Transparency=0})
-        Tween(UltraFPSBtn,  {TextColor3=C.textOn, BackgroundColor3=Color3.fromRGB(8,22,8)})
-        ultraWarnLbl.Text        = "✅  Ultra mode active"
-        ultraWarnLbl.TextColor3  = C.green
-        ultraWarnLbl2.Text       = "Rejoin to restore game visuals"
-        ultraWarnLbl2.TextColor3 = Color3.fromRGB(80,160,80)
+local selectedLbl=MakeStatusLbl(pgTroll,"No player selected",2)
+selectedLbl.TextColor3=C.textDim
 
-        -- Quality level
-        pcall(function()
-            UserSettings():GetService("UserGameSettings").SavedQualityLevel =
-                Enum.SavedQualitySetting.QualityLevel1
-        end)
+SectionLabel(pgTroll,"ACTIONS",50)
+local ThrowBtn,ThrowBtnS=MakeBtn(pgTroll,"ThrowBtn","💀  Throw Player into Void",C.red,51)
+local trollStatusLbl=MakeStatusLbl(pgTroll,"Select a player first",52)
 
-        -- Nuke lighting
-        Lighting.GlobalShadows  = false
-        Lighting.FogEnd         = 9e9
-        Lighting.Brightness     = 0
-        Lighting.Ambient        = Color3.fromRGB(128,128,128)
-        Lighting.OutdoorAmbient = Color3.fromRGB(128,128,128)
-        Lighting.ShadowSoftness = 0
-        for _, child in ipairs(Lighting:GetChildren()) do
-            pcall(function()
-                if child:IsA("Sky") then child:Destroy()
-                elseif child:IsA("Atmosphere") then
-                    child.Density=0; child.Glare=0; child.Haze=0
-                elseif child:IsA("BloomEffect")    or child:IsA("SunRaysEffect")
-                or     child:IsA("ColorCorrectionEffect") or child:IsA("DepthOfFieldEffect")
-                or     child:IsA("BlurEffect") then child.Enabled = false
+-- Rebuild player list
+local playerBtns={}
+local function RefreshPlayerList()
+    for _,b in pairs(playerBtns) do pcall(function() b:Destroy() end) end
+    playerBtns={}
+    for _,plr in ipairs(Players:GetPlayers()) do
+        if plr~=LocalPlayer then
+            local pb,ps=MakeBtn(playerListFrame,"plr_"..plr.Name,
+                "👤  "..plr.Name, C.purple, 0)
+            pb.Size=UDim2.new(1,0,0,36)
+            pb.MouseButton1Click:Connect(function()
+                selectedTrollPlayer=plr
+                selectedLbl.Text="Selected: "..plr.Name
+                selectedLbl.TextColor3=C.purple
+                for _,b2 in pairs(playerBtns) do
+                    Tween(b2,{BackgroundColor3=C.bg2})
                 end
+                Tween(pb,{BackgroundColor3=Color3.fromRGB(25,12,40)})
             end)
+            table.insert(playerBtns,pb)
         end
+    end
+    if #playerBtns==0 then
+        local lbl=Instance.new("TextLabel",playerListFrame)
+        lbl.Size=UDim2.new(1,0,0,36); lbl.BackgroundTransparency=1
+        lbl.Font=Enum.Font.Gotham; lbl.Text="No other players in server"
+        lbl.TextColor3=C.textDim; lbl.TextSize=11; lbl.ZIndex=7
+        table.insert(playerBtns,lbl)
+    end
+end
 
-        -- Nuke workspace in batches of 250
-        local SAFE = {
-            DeltaStatic_InvisibleFloor = true,
-            NavMarker = true,
-            AutoFarmMarker = true,
-        }
-        task.spawn(function()
-            local all = workspace:GetDescendants()
-            for i, obj in ipairs(all) do
-                pcall(function()
-                    if obj:IsA("BasePart") then
-                        local isChar = false
-                        for _, plr in ipairs(Players:GetPlayers()) do
-                            if plr.Character and obj:IsDescendantOf(plr.Character) then
-                                isChar = true; break
-                            end
-                        end
-                        if not isChar and not SAFE[obj.Name] then
-                            obj.Material    = Enum.Material.SmoothPlastic
-                            obj.Reflectance = 0
-                            obj.CastShadow  = false
-                        end
-                    elseif obj:IsA("Decal")  or obj:IsA("Texture")        then obj.Transparency = 1
-                    elseif obj:IsA("ParticleEmitter") or obj:IsA("Smoke")
-                    or     obj:IsA("Fire")   or obj:IsA("Sparkles")        then obj.Enabled = false
-                    elseif obj:IsA("Explosion")                             then obj.Visible = false
-                    elseif obj:IsA("Sound")                                 then obj.Volume  = 0
-                    elseif obj:IsA("Trail")  or obj:IsA("Beam")            then obj.Enabled = false
-                    elseif obj:IsA("SpecialMesh")                           then obj.TextureId = ""
-                    elseif obj:IsA("BillboardGui") or obj:IsA("SurfaceGui") then obj.Enabled = false
-                    elseif obj:IsA("SelectionBox") then
-                        if not obj.Name:find("ESP") and obj.Name ~= "FakeESP_Box" then
-                            obj.Visible = false
-                        end
-                    end
-                end)
-                if i % 250 == 0 then task.wait() end
+Players.PlayerAdded:Connect(RefreshPlayerList)
+Players.PlayerRemoving:Connect(function(p)
+    if selectedTrollPlayer==p then
+        selectedTrollPlayer=nil
+        selectedLbl.Text="No player selected"
+        selectedLbl.TextColor3=C.textDim
+    end
+    RefreshPlayerList()
+end)
+RefreshPlayerList()
+
+-- =================================================================
+-- UI TAB
+-- =================================================================
+SectionLabel(pgUI,"PRESET",0)
+local SavePresetBtn,  SavePresetBtnS  = MakeBtn(pgUI,"SavePresetBtn",  "💾  Save Preset",    C.accent,1)
+local LoadPresetBtn,  LoadPresetBtnS  = MakeBtn(pgUI,"LoadPresetBtn",  "📂  Load Preset",    C.accent,2)
+local presetStatusLbl=MakeStatusLbl(pgUI,"Saves current toggle states (client only)",3)
+
+SectionLabel(pgUI,"THEME",50)
+local ThemeDarkBtn,  ThemeDarkBtnS  = MakeBtn(pgUI,"ThemeDark",  "🌑  Dark Theme",   C.accent, 51)
+local ThemeNeonBtn,  ThemeNeonBtnS  = MakeBtn(pgUI,"ThemeNeon",  "🌈  Neon Theme",   C.purple, 52)
+local ThemeGlassBtn, ThemeGlassBtnS = MakeBtn(pgUI,"ThemeGlass", "🪟  Glass Theme",  C.accent, 53)
+local themeStatusLbl=MakeStatusLbl(pgUI,"Current: Dark",54)
+
+-- =================================================================
+-- ULTRA FPS WARNING POPUP
+-- =================================================================
+local WarnPopup=Instance.new("Frame",ScreenGui)
+WarnPopup.Name="UltraFPSWarning"
+WarnPopup.Size=UDim2.new(0,270,0,230); WarnPopup.Position=UDim2.new(0.5,-135,0.5,-115)
+WarnPopup.BackgroundColor3=Color3.fromRGB(14,8,4); WarnPopup.BorderSizePixel=0
+WarnPopup.ZIndex=20; WarnPopup.Visible=false
+Instance.new("UICorner",WarnPopup).CornerRadius=UDim.new(0,16)
+local ws=Instance.new("UIStroke",WarnPopup)
+ws.Color=C.orange; ws.Thickness=2; ws.Transparency=0.1
+
+local whdr=Instance.new("Frame",WarnPopup)
+whdr.Size=UDim2.new(1,0,0,44); whdr.BackgroundColor3=Color3.fromRGB(28,12,4)
+whdr.BorderSizePixel=0; whdr.ZIndex=21
+Instance.new("UICorner",whdr).CornerRadius=UDim.new(0,16)
+local wfix=Instance.new("Frame",whdr)
+wfix.Size=UDim2.new(1,0,0.5,0); wfix.Position=UDim2.new(0,0,0.5,0)
+wfix.BackgroundColor3=Color3.fromRGB(28,12,4); wfix.BorderSizePixel=0; wfix.ZIndex=21
+local wt=Instance.new("TextLabel",whdr)
+wt.Size=UDim2.new(1,0,1,0); wt.BackgroundTransparency=1; wt.Font=Enum.Font.GothamBold
+wt.Text="⚡  ULTRA FPS — WARNING  ⚡"; wt.TextColor3=C.orange; wt.TextSize=13; wt.ZIndex=22
+
+local wLines={
+    {"⚠  THIS WILL PERMANENTLY UNLOAD:", Color3.fromRGB(255,160,60),true},
+    {"• All Textures & Decals",           Color3.fromRGB(220,140,70),false},
+    {"• All Particles, Fire & Smoke",     Color3.fromRGB(220,140,70),false},
+    {"• All Sounds",                      Color3.fromRGB(220,140,70),false},
+    {"• All Shadows & Fog",               Color3.fromRGB(220,140,70),false},
+    {"• Sky & Atmosphere",                Color3.fromRGB(220,140,70),false},
+    {"• All Trails & Beams",              Color3.fromRGB(220,140,70),false},
+    {"",                                  C.textDim,               false},
+    {"Cannot be undone until rejoin.",    Color3.fromRGB(255,80,80), true},
+}
+for i,ln in ipairs(wLines) do
+    local lbl=Instance.new("TextLabel",WarnPopup)
+    lbl.Size=UDim2.new(1,-20,0,16); lbl.Position=UDim2.new(0,10,0,40+(i-1)*18)
+    lbl.BackgroundTransparency=1
+    lbl.Font=ln[3] and Enum.Font.GothamBold or Enum.Font.Gotham
+    lbl.Text=ln[1]; lbl.TextColor3=ln[2]; lbl.TextSize=10
+    lbl.TextXAlignment=Enum.TextXAlignment.Left; lbl.ZIndex=22
+end
+
+local wConfirm=Instance.new("TextButton",WarnPopup)
+wConfirm.Size=UDim2.new(0,114,0,36); wConfirm.Position=UDim2.new(0,12,1,-46)
+wConfirm.BackgroundColor3=Color3.fromRGB(180,50,10); wConfirm.Font=Enum.Font.GothamBold
+wConfirm.Text="✓  Activate"; wConfirm.TextColor3=Color3.fromRGB(255,220,200)
+wConfirm.TextSize=13; wConfirm.ZIndex=22
+Instance.new("UICorner",wConfirm).CornerRadius=UDim.new(0,10)
+local wcs=Instance.new("UIStroke",wConfirm)
+wcs.Color=C.orange; wcs.Thickness=1.2; wcs.Transparency=0.3
+
+local wCancel=Instance.new("TextButton",WarnPopup)
+wCancel.Size=UDim2.new(0,114,0,36); wCancel.Position=UDim2.new(1,-126,1,-46)
+wCancel.BackgroundColor3=C.bg2; wCancel.Font=Enum.Font.GothamBold
+wCancel.Text="✕  Cancel"; wCancel.TextColor3=C.textMid; wCancel.TextSize=13; wCancel.ZIndex=22
+Instance.new("UICorner",wCancel).CornerRadius=UDim.new(0,10)
+
+local function ActivateUltraFPS()
+    ultraFPSActive=true; WarnPopup.Visible=false
+    local function applyTo(btn,btnS,wl,wl2)
+        if not btn then return end
+        btn.Text="⚡  Ultra FPS Boost: ON"
+        Tween(btnS,{Color=C.green,Transparency=0})
+        Tween(btn, {TextColor3=C.textOn})
+        if wl  then wl.Text="✅  Ultra mode active";           wl.TextColor3=C.green end
+        if wl2 then wl2.Text="Rejoin to restore game visuals"; wl2.TextColor3=Color3.fromRGB(80,160,80) end
+    end
+    applyTo(UltraFPSBtn,UltraFPSBtnS,ultraWarnLbl,ultraWarnLbl2)
+    applyTo(UltraBtn2,UltraBtn2S,nil,nil)
+    pcall(function()
+        UserSettings():GetService("UserGameSettings").SavedQualityLevel=
+            Enum.SavedQualitySetting.QualityLevel1
+    end)
+    Lighting.GlobalShadows=false; Lighting.FogEnd=9e9; Lighting.Brightness=0
+    Lighting.Ambient=Color3.fromRGB(128,128,128)
+    Lighting.OutdoorAmbient=Color3.fromRGB(128,128,128)
+    Lighting.ShadowSoftness=0
+    for _,ch in ipairs(Lighting:GetChildren()) do pcall(function()
+        if ch:IsA("Sky") then ch:Destroy()
+        elseif ch:IsA("Atmosphere") then ch.Density=0;ch.Glare=0;ch.Haze=0
+        elseif ch:IsA("BloomEffect") or ch:IsA("SunRaysEffect")
+        or ch:IsA("ColorCorrectionEffect") or ch:IsA("DepthOfFieldEffect")
+        or ch:IsA("BlurEffect") then ch.Enabled=false end
+    end) end
+    local SAFE={DeltaStatic_InvisibleFloor=true,NavMarker=true,AutoFarmMarker=true}
+    task.spawn(function()
+        local all=workspace:GetDescendants()
+        for i,obj in ipairs(all) do pcall(function()
+            if obj:IsA("BasePart") then
+                local isChar=false
+                for _,plr in ipairs(Players:GetPlayers()) do
+                    if plr.Character and obj:IsDescendantOf(plr.Character) then isChar=true;break end
+                end
+                if not isChar and not SAFE[obj.Name] then
+                    obj.Material=Enum.Material.SmoothPlastic
+                    obj.Reflectance=0; obj.CastShadow=false
+                end
+            elseif obj:IsA("Decal") or obj:IsA("Texture")         then obj.Transparency=1
+            elseif obj:IsA("ParticleEmitter") or obj:IsA("Smoke")
+            or obj:IsA("Fire") or obj:IsA("Sparkles")             then obj.Enabled=false
+            elseif obj:IsA("Explosion")                            then obj.Visible=false
+            elseif obj:IsA("Sound")                                then obj.Volume=0
+            elseif obj:IsA("Trail") or obj:IsA("Beam")            then obj.Enabled=false
+            elseif obj:IsA("SpecialMesh")                          then obj.TextureId=""
+            elseif obj:IsA("BillboardGui") or obj:IsA("SurfaceGui") then obj.Enabled=false
             end
-
-            -- Hook new objects
-            workspace.DescendantAdded:Connect(function(obj)
-                if not ultraFPSActive then return end
-                pcall(function()
-                    if obj:IsA("ParticleEmitter") or obj:IsA("Smoke")
-                    or obj:IsA("Fire") or obj:IsA("Sparkles") then obj.Enabled = false
-                    elseif obj:IsA("Decal") or obj:IsA("Texture") then obj.Transparency = 1
-                    elseif obj:IsA("Sound") then obj.Volume = 0
-                    elseif obj:IsA("Trail") or obj:IsA("Beam") then obj.Enabled = false
-                    elseif obj:IsA("BillboardGui") or obj:IsA("SurfaceGui") then obj.Enabled = false
-                    end
-                end)
+        end)
+        if i%250==0 then task.wait() end end
+        workspace.DescendantAdded:Connect(function(obj)
+            if not ultraFPSActive then return end
+            pcall(function()
+                if obj:IsA("ParticleEmitter") or obj:IsA("Smoke")
+                or obj:IsA("Fire") or obj:IsA("Sparkles") then obj.Enabled=false
+                elseif obj:IsA("Decal") or obj:IsA("Texture") then obj.Transparency=1
+                elseif obj:IsA("Sound")                       then obj.Volume=0
+                elseif obj:IsA("Trail") or obj:IsA("Beam")    then obj.Enabled=false
+                elseif obj:IsA("BillboardGui") or obj:IsA("SurfaceGui") then obj.Enabled=false
+                end
             end)
         end)
     end)
 end
 
-UltraFPSBtn.MouseButton1Click:Connect(function()
-    if ultraFPSActive then
-        UltraFPSBtn.Text = "⚡  Ultra FPS: already ON"
-        task.delay(1.5, function() UltraFPSBtn.Text = "⚡  Ultra FPS Boost: ON" end)
-        return
-    end
-    if ultraFPSWarning then return end
-    ultraFPSWarning   = true
-    WarnPopup.Visible = true
+wCancel.MouseButton1Click:Connect(function()
+    WarnPopup.Visible=false; ultraFPSWarning=false
 end)
+wConfirm.MouseButton1Click:Connect(ActivateUltraFPS)
+
+local function TriggerUltraFPS()
+    if ultraFPSActive then return end
+    if ultraFPSWarning then return end
+    ultraFPSWarning=true; WarnPopup.Visible=true
+end
+
+UltraFPSBtn.MouseButton1Click:Connect(TriggerUltraFPS)
+UltraBtn2.MouseButton1Click:Connect(TriggerUltraFPS)
 
 -- =================================================================
--- MENU TOGGLE
+-- MENU OPEN/CLOSE  (animated)
 -- =================================================================
 MenuBtn.MouseButton1Click:Connect(function()
-    MainFrame.Visible = not MainFrame.Visible
     if MainFrame.Visible then
-        MenuBtn.Text = "✕"
-        Tween(MenuBtn,  {BackgroundColor3=Color3.fromRGB(28,12,12), TextColor3=C.red})
-        Tween(MenuBtnS, {Color=C.red, Transparency=0.2})
+        Tween(MainFrame,{Size=UDim2.new(0,420,0,0),
+            Position=UDim2.new(MainFrame.Position.X.Scale,
+                MainFrame.Position.X.Offset,
+                MainFrame.Position.Y.Scale,
+                MainFrame.Position.Y.Offset+27)}, tweenMed)
+        task.delay(0.28,function()
+            MainFrame.Visible=false
+            MainFrame.Size=UDim2.new(0,420,0.93,0)
+        end)
+        MenuBtn.Text="☰"
+        Tween(MenuBtn,  {BackgroundColor3=C.bg1,TextColor3=C.accent})
+        Tween(MenuBtnS, {Color=C.accent,Transparency=0.4})
     else
-        MenuBtn.Text = "FN"
-        Tween(MenuBtn,  {BackgroundColor3=C.bg1, TextColor3=C.accent})
-        Tween(MenuBtnS, {Color=C.accent, Transparency=0.4})
+        MainFrame.Size=UDim2.new(0,420,0,0)
+        MainFrame.Visible=true
+        Tween(MainFrame,{Size=UDim2.new(0,420,0.93,0)}, tweenBounce)
+        MenuBtn.Text="✕"
+        Tween(MenuBtn,  {BackgroundColor3=Color3.fromRGB(28,12,12),TextColor3=C.red})
+        Tween(MenuBtnS, {Color=C.red,Transparency=0.2})
+        if activeTab==nil then SwitchTab("Movement") end
     end
 end)
 
 PlatBtn.MouseButton1Click:Connect(function()
-    PlatActionBtn.Visible = not PlatActionBtn.Visible
-    Tween(PlatBtnStroke, PlatActionBtn.Visible
-        and {Color=C.green, Transparency=0.1}
-        or  {Color=C.accent, Transparency=0.4})
+    PlatActionBtn.Visible=not PlatActionBtn.Visible
+    Tween(PlatBtnStroke,PlatActionBtn.Visible
+        and {Color=C.green,Transparency=0.1}
+        or  {Color=C.accent,Transparency=0.4})
 end)
 
 -- =================================================================
@@ -653,59 +968,57 @@ end)
 local function TogglePlatform(enable)
     if enable then
         if not platformPart or not platformPart.Parent then
-            platformPart = Instance.new("Part")
-            platformPart.Size = Vector3.new(6.5,0.5,6.5); platformPart.Anchored = true
-            platformPart.Transparency = 1; platformPart.Name = "DeltaStatic_InvisibleFloor"
-            platformPart.Parent = workspace
+            platformPart=Instance.new("Part")
+            platformPart.Size=Vector3.new(6.5,0.5,6.5); platformPart.Anchored=true
+            platformPart.Transparency=1; platformPart.Name="DeltaStatic_InvisibleFloor"
+            platformPart.Parent=workspace
         end
         if not platformConnection then
-            platformConnection = RunService.Heartbeat:Connect(function()
-                local rp = GetRootPart()
+            platformConnection=RunService.Heartbeat:Connect(function()
+                local rp=GetRootPart()
                 if rp and platformPart then
-                    local vy   = rp.AssemblyLinearVelocity.Y
-                    local expP = rp.Position - Vector3.new(0,3.6,0)
-                    local dist = (platformPart.Position - expP).Magnitude
-                    if dist > 15 or vy > 1 then
-                        platformPart.CanCollide = false
-                        platformPart.Position   = expP
+                    local vy=rp.AssemblyLinearVelocity.Y
+                    local expP=rp.Position-Vector3.new(0,3.6,0)
+                    local dist=(platformPart.Position-expP).Magnitude
+                    if dist>15 or vy>1 then
+                        platformPart.CanCollide=false; platformPart.Position=expP
                     else
-                        platformPart.CanCollide = platformCollide
-                        platformPart.Position = platformCollide
-                            and Vector3.new(rp.Position.X, platformPart.Position.Y, rp.Position.Z)
-                            or  expP
+                        platformPart.CanCollide=platformCollide
+                        platformPart.Position=platformCollide
+                            and Vector3.new(rp.Position.X,platformPart.Position.Y,rp.Position.Z)
+                            or expP
                     end
                 end
             end)
         end
     else
-        if platformConnection then platformConnection:Disconnect(); platformConnection = nil end
-        if platformPart       then platformPart:Destroy();          platformPart       = nil end
+        if platformConnection then platformConnection:Disconnect();platformConnection=nil end
+        if platformPart then platformPart:Destroy();platformPart=nil end
     end
 end
 
 local function ApplyPlatform(enable)
-    platformEnabled = enable
-    TogglePlatform(enable)
-    local txt = enable and "Platform: ON" or "Platform: OFF"
-    PlatformBtn.Text = txt; PlatActionBtn.Text = txt
+    platformEnabled=enable; TogglePlatform(enable)
+    local txt=enable and "⬛  Platform: ON" or "⬛  Platform: OFF"
+    PlatformBtn.Text=txt; PlatActionBtn.Text=enable and "Platform: ON" or "Platform: OFF"
     if enable then
-        SetOn(PlatformBtn, PlatformBtnS, C.green)
-        Tween(PlatActionBtn,    {TextColor3=C.textOn})
-        Tween(PlatActionStroke, {Color=C.green, Transparency=0.05})
+        SetOn(PlatformBtn,PlatformBtnS,C.green)
+        Tween(PlatActionBtn,   {TextColor3=C.textOn})
+        Tween(PlatActionStroke,{Color=C.green,Transparency=0.05})
     else
-        SetOff(PlatformBtn, PlatformBtnS)
-        Tween(PlatActionBtn,    {TextColor3=C.textMid})
-        Tween(PlatActionStroke, {Color=C.accent, Transparency=0.5})
+        SetOff(PlatformBtn,PlatformBtnS)
+        Tween(PlatActionBtn,   {TextColor3=C.textMid})
+        Tween(PlatActionStroke,{Color=C.accent,Transparency=0.5})
     end
 end
 
-PlatformBtn.MouseButton1Click:Connect(function()   ApplyPlatform(not platformEnabled) end)
-PlatActionBtn.MouseButton1Click:Connect(function()  ApplyPlatform(not platformEnabled) end)
+PlatformBtn.MouseButton1Click:Connect(function()  ApplyPlatform(not platformEnabled) end)
+PlatActionBtn.MouseButton1Click:Connect(function() ApplyPlatform(not platformEnabled) end)
 CollideBtn.MouseButton1Click:Connect(function()
-    platformCollide = not platformCollide
-    CollideBtn.Text = platformCollide and "Platform Collide: ON" or "Platform Collide: OFF"
-    if platformCollide then SetOn(CollideBtn, CollideBtnS, C.green)
-    else SetOff(CollideBtn, CollideBtnS, C.green) end
+    platformCollide=not platformCollide
+    CollideBtn.Text=platformCollide and "↕  Platform Collide: ON" or "↕  Platform Collide: OFF"
+    if platformCollide then SetOn(CollideBtn,CollideBtnS,C.green)
+    else SetOff(CollideBtn,CollideBtnS,C.green) end
 end)
 
 -- =================================================================
@@ -713,47 +1026,59 @@ end)
 -- =================================================================
 RunService.Stepped:Connect(function()
     if not noclipEnabled then return end
-    local ch = GetCharacter(); if not ch then return end
-    for _, p in ipairs(ch:GetDescendants()) do
-        if p:IsA("BasePart") then p.CanCollide = false end
+    local ch=GetCharacter(); if not ch then return end
+    for _,p in ipairs(ch:GetDescendants()) do
+        if p:IsA("BasePart") then p.CanCollide=false end
     end
 end)
 
 NoclipBtn.MouseButton1Click:Connect(function()
-    noclipEnabled = not noclipEnabled
-    NoclipBtn.Text = noclipEnabled and "Noclip: ON" or "Noclip: OFF"
-    if noclipEnabled then SetOn(NoclipBtn, NoclipBtnS, C.green)
+    noclipEnabled=not noclipEnabled
+    NoclipBtn.Text=noclipEnabled and "👻  Noclip: ON" or "👻  Noclip: OFF"
+    if noclipEnabled then SetOn(NoclipBtn,NoclipBtnS,C.green)
     else
-        SetOff(NoclipBtn, NoclipBtnS)
-        local ch = GetCharacter()
-        if ch then for _, p in ipairs(ch:GetDescendants()) do
-            if p:IsA("BasePart") then p.CanCollide = true end
+        SetOff(NoclipBtn,NoclipBtnS)
+        local ch=GetCharacter()
+        if ch then for _,p in ipairs(ch:GetDescendants()) do
+            if p:IsA("BasePart") then p.CanCollide=true end
         end end
     end
 end)
 
 -- =================================================================
--- FLY
+-- FLY  (fixed — mobile joystick + jump button lift)
 -- =================================================================
+local flyJumpHeld=false
+local flyJumpConn=nil
+
 local function StopFly()
-    flyEnabled = false
-    if flyBody then flyBody:Destroy(); flyBody = nil end
-    if flyGyro then flyGyro:Destroy(); flyGyro = nil end
-    local hum = GetHumanoid()
-    if hum then hum.PlatformStand = false end
-    FlyBtn.Text = "Fly: OFF"; SetOff(FlyBtn, FlyBtnS)
+    flyEnabled=false
+    if flyBody then flyBody:Destroy();flyBody=nil end
+    if flyGyro then flyGyro:Destroy();flyGyro=nil end
+    if flyJumpConn then flyJumpConn:Disconnect();flyJumpConn=nil end
+    local hum=GetHumanoid()
+    if hum then hum.PlatformStand=false end
+    FlyBtn.Text="✈  Fly: OFF"; SetOff(FlyBtn,FlyBtnS)
 end
 
 local function StartFly()
-    local rp = GetRootPart(); local hum = GetHumanoid()
+    local rp=GetRootPart(); local hum=GetHumanoid()
     if not rp or not hum then return end
-    flyEnabled = true
-    flyBody = Instance.new("BodyVelocity", rp)
-    flyBody.Velocity = Vector3.zero; flyBody.MaxForce = Vector3.new(1e5,1e5,1e5)
-    flyGyro = Instance.new("BodyGyro", rp)
-    flyGyro.MaxTorque = Vector3.new(1e5,1e5,1e5); flyGyro.P = 1e4
-    hum.PlatformStand = true
-    FlyBtn.Text = "Fly: ON"; SetOn(FlyBtn, FlyBtnS, C.green)
+    flyEnabled=true
+    if flyBody then flyBody:Destroy() end
+    if flyGyro then flyGyro:Destroy() end
+    flyBody=Instance.new("BodyVelocity",rp)
+    flyBody.Velocity=Vector3.zero
+    flyBody.MaxForce=Vector3.new(1e5,1e5,1e5)
+    flyGyro=Instance.new("BodyGyro",rp)
+    flyGyro.MaxTorque=Vector3.new(1e5,1e5,1e5); flyGyro.P=1e4
+    hum.PlatformStand=true
+    -- Mobile jump button → lift
+    flyJumpConn=UIS.JumpRequest:Connect(function()
+        flyJumpHeld=true
+        task.delay(0.18,function() flyJumpHeld=false end)
+    end)
+    FlyBtn.Text="✈  Fly: ON"; SetOn(FlyBtn,FlyBtnS,C.green)
 end
 
 FlyBtn.MouseButton1Click:Connect(function()
@@ -762,17 +1087,35 @@ end)
 
 RunService.RenderStepped:Connect(function()
     if not flyEnabled or not flyBody or not flyGyro then return end
-    local cam = workspace.CurrentCamera; local dir = Vector3.zero
-    if UIS:IsKeyDown(Enum.KeyCode.W)         then dir = dir + cam.CFrame.LookVector end
-    if UIS:IsKeyDown(Enum.KeyCode.S)         then dir = dir - cam.CFrame.LookVector end
-    if UIS:IsKeyDown(Enum.KeyCode.A)         then dir = dir - cam.CFrame.RightVector end
-    if UIS:IsKeyDown(Enum.KeyCode.D)         then dir = dir + cam.CFrame.RightVector end
-    if UIS:IsKeyDown(Enum.KeyCode.Space)     then dir = dir + Vector3.yAxis end
-    if UIS:IsKeyDown(Enum.KeyCode.LeftShift) then dir = dir - Vector3.yAxis end
-    local hum = GetHumanoid()
-    if hum and hum:GetState() == Enum.HumanoidStateType.Jumping then dir = dir + Vector3.yAxis end
-    flyBody.Velocity = dir.Magnitude > 0 and dir.Unit * 60 or Vector3.zero
-    flyGyro.CFrame   = cam.CFrame
+    local cam=workspace.CurrentCamera
+    local hum=GetHumanoid()
+    local dir=Vector3.zero
+
+    -- PC keyboard
+    if UIS:IsKeyDown(Enum.KeyCode.W)         then dir=dir+cam.CFrame.LookVector  end
+    if UIS:IsKeyDown(Enum.KeyCode.S)         then dir=dir-cam.CFrame.LookVector  end
+    if UIS:IsKeyDown(Enum.KeyCode.A)         then dir=dir-cam.CFrame.RightVector end
+    if UIS:IsKeyDown(Enum.KeyCode.D)         then dir=dir+cam.CFrame.RightVector end
+    if UIS:IsKeyDown(Enum.KeyCode.Space)     then dir=dir+Vector3.yAxis           end
+    if UIS:IsKeyDown(Enum.KeyCode.LeftShift) then dir=dir-Vector3.yAxis           end
+
+    -- Mobile joystick: use humanoid MoveDirection projected flat
+    if hum and hum.MoveDirection.Magnitude>0.1 then
+        local md=hum.MoveDirection
+        local flat=Vector3.new(md.X,0,md.Z)
+        if flat.Magnitude>0.01 then
+            -- Project joystick onto camera-relative axes
+            local fwd=Vector3.new(cam.CFrame.LookVector.X,0,cam.CFrame.LookVector.Z).Unit
+            local rgt=Vector3.new(cam.CFrame.RightVector.X,0,cam.CFrame.RightVector.Z).Unit
+            dir=dir+(fwd*md.Z+rgt*md.X)
+        end
+    end
+
+    -- Mobile jump button lift
+    if flyJumpHeld then dir=dir+Vector3.yAxis end
+
+    flyBody.Velocity=dir.Magnitude>0 and dir.Unit*60 or Vector3.zero
+    flyGyro.CFrame=cam.CFrame
 end)
 
 -- =================================================================
@@ -780,29 +1123,29 @@ end)
 -- =================================================================
 UIS.JumpRequest:Connect(function()
     if airJumpEnabled then
-        local hum = GetHumanoid()
+        local hum=GetHumanoid()
         if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
     end
 end)
 
 AirJumpBtn.MouseButton1Click:Connect(function()
-    airJumpEnabled = not airJumpEnabled
-    AirJumpBtn.Text = airJumpEnabled and "Air Jump: ON" or "Air Jump: OFF"
-    if airJumpEnabled then SetOn(AirJumpBtn, AirJumpBtnS, C.green)
-    else SetOff(AirJumpBtn, AirJumpBtnS) end
+    airJumpEnabled=not airJumpEnabled
+    AirJumpBtn.Text=airJumpEnabled and "↑  Air Jump: ON" or "↑  Air Jump: OFF"
+    if airJumpEnabled then SetOn(AirJumpBtn,AirJumpBtnS,C.green)
+    else SetOff(AirJumpBtn,AirJumpBtnS) end
 end)
 
 -- =================================================================
 -- EXTREME SPEED
 -- =================================================================
 ExtremeBtn.MouseButton1Click:Connect(function()
-    extremeSpeedEnabled = not extremeSpeedEnabled
-    ExtremeBtn.Text = extremeSpeedEnabled and "Extreme Speed: ON" or "Extreme Speed: OFF"
+    extremeSpeedEnabled=not extremeSpeedEnabled
+    ExtremeBtn.Text=extremeSpeedEnabled and "⚡  Extreme Speed: ON" or "⚡  Extreme Speed: OFF"
     if extremeSpeedEnabled then
-        SetOn(ExtremeBtn, ExtremeBtnS, C.green)
+        SetOn(ExtremeBtn,ExtremeBtnS,C.green)
         if speedSliderUpdate then speedSliderUpdate(10000) end
     else
-        SetOff(ExtremeBtn, ExtremeBtnS)
+        SetOff(ExtremeBtn,ExtremeBtnS)
         if speedSliderUpdate then speedSliderUpdate(500) end
     end
 end)
@@ -811,97 +1154,94 @@ end)
 -- SPEED LOCK
 -- =================================================================
 SpeedLockBtn.MouseButton1Click:Connect(function()
-    speedLockEnabled = not speedLockEnabled
-    SpeedLockBtn.Text = speedLockEnabled and "Speed Lock: ON" or "Speed Lock: OFF"
-    if speedLockEnabled then SetOn(SpeedLockBtn, SpeedLockBtnS, C.green)
-    else SetOff(SpeedLockBtn, SpeedLockBtnS) end
+    speedLockEnabled=not speedLockEnabled
+    SpeedLockBtn.Text=speedLockEnabled and "🔒  Speed Lock: ON" or "🔒  Speed Lock: OFF"
+    if speedLockEnabled then SetOn(SpeedLockBtn,SpeedLockBtnS,C.green)
+    else SetOff(SpeedLockBtn,SpeedLockBtnS) end
 end)
 
 task.spawn(function()
-    while true do
-        task.wait(0.4)
-        local hum = GetHumanoid()
+    while true do task.wait(0.4)
+        local hum=GetHumanoid()
         if hum then
             if not isGoingToTarget and not autoFarmEnabled then
-                hum.WalkSpeed = currentSpeed
+                hum.WalkSpeed=currentSpeed
             end
-            hum.UseJumpPower = true; hum.JumpPower = currentJump
+            hum.UseJumpPower=true; hum.JumpPower=currentJump
         end
     end
 end)
 
 -- =================================================================
--- MARK LOCATION
+-- MARK LOCATION & GO TO TARGET
 -- =================================================================
-local markConnection = nil
+local markConnection=nil
 local function ShowMarker(pos)
     if markerPart and markerPart.Parent then markerPart:Destroy() end
-    markerPart = Instance.new("Part")
-    markerPart.Name = "NavMarker"; markerPart.Size = Vector3.new(1.2,0.3,1.2)
-    markerPart.Anchored = true; markerPart.CanCollide = false
-    markerPart.Material = Enum.Material.Neon; markerPart.Color = C.accent
-    markerPart.Transparency = 0.3; markerPart.Position = pos; markerPart.Parent = workspace
+    markerPart=Instance.new("Part")
+    markerPart.Name="NavMarker"; markerPart.Size=Vector3.new(1.2,0.3,1.2)
+    markerPart.Anchored=true; markerPart.CanCollide=false
+    markerPart.Material=Enum.Material.Neon; markerPart.Color=C.accent
+    markerPart.Transparency=0.3; markerPart.Position=pos; markerPart.Parent=workspace
 end
 
 local function StartMarking()
-    markConnection = UIS.InputBegan:Connect(function(inp, gpe)
+    markConnection=UIS.InputBegan:Connect(function(inp,gpe)
         if gpe then return end
-        if inp.UserInputType ~= Enum.UserInputType.MouseButton1
-        and inp.UserInputType ~= Enum.UserInputType.Touch then return end
-        local cam = workspace.CurrentCamera
-        local ray = cam:ScreenPointToRay(inp.Position.X, inp.Position.Y)
-        local params = RaycastParams.new()
-        params.FilterType = Enum.RaycastFilterType.Exclude
-        local excl = {}
-        if GetCharacter() then table.insert(excl, GetCharacter()) end
-        if markerPart     then table.insert(excl, markerPart) end
-        params.FilterDescendantsInstances = excl
-        local result = workspace:Raycast(ray.Origin, ray.Direction*1000, params)
+        if inp.UserInputType~=Enum.UserInputType.MouseButton1
+        and inp.UserInputType~=Enum.UserInputType.Touch then return end
+        local cam=workspace.CurrentCamera
+        local ray=cam:ScreenPointToRay(inp.Position.X,inp.Position.Y)
+        local params=RaycastParams.new()
+        params.FilterType=Enum.RaycastFilterType.Exclude
+        local excl={}
+        if GetCharacter() then table.insert(excl,GetCharacter()) end
+        if markerPart     then table.insert(excl,markerPart) end
+        params.FilterDescendantsInstances=excl
+        local result=workspace:Raycast(ray.Origin,ray.Direction*1000,params)
         if result then
-            savedTargetPos = result.Position; ShowMarker(savedTargetPos)
+            savedTargetPos=result.Position; ShowMarker(savedTargetPos)
             Tween(MarkBtn,{TextColor3=C.textOn})
-            task.delay(0.4, function() Tween(MarkBtn,{TextColor3=C.textMid}) end)
+            task.delay(0.4,function() Tween(MarkBtn,{TextColor3=C.textMid}) end)
         end
     end)
 end
 
 local function StopMarking()
-    if markConnection then markConnection:Disconnect(); markConnection = nil end
+    if markConnection then markConnection:Disconnect();markConnection=nil end
 end
 
 MarkBtn.MouseButton1Click:Connect(function()
-    markingEnabled = not markingEnabled
-    MarkBtn.Text = markingEnabled and "Mark Location: ON" or "Mark Location: OFF"
-    if markingEnabled then SetOn(MarkBtn, MarkBtnS, C.gold); StartMarking()
-    else SetOff(MarkBtn, MarkBtnS, C.gold); StopMarking() end
+    markingEnabled=not markingEnabled
+    MarkBtn.Text=markingEnabled and "📍  Mark Location: ON" or "📍  Mark Location: OFF"
+    if markingEnabled then SetOn(MarkBtn,MarkBtnS,C.gold);StartMarking()
+    else SetOff(MarkBtn,MarkBtnS,C.gold);StopMarking() end
 end)
 
--- =================================================================
--- GO TO TARGET
--- =================================================================
 local function StopGo()
-    isGoingToTarget = false
-    if goToConnection then goToConnection:Disconnect(); goToConnection = nil end
-    local hum = GetHumanoid()
-    if hum then hum.WalkSpeed = currentSpeed end
-    GoBtn.Text = "Go to Target"; SetOff(GoBtn, GoBtnS)
+    isGoingToTarget=false
+    if goToConnection then goToConnection:Disconnect();goToConnection=nil end
+    local hum=GetHumanoid()
+    if hum then hum.WalkSpeed=currentSpeed end
+    GoBtn.Text="🚶  Go to Target"; SetOff(GoBtn,GoBtnS)
 end
 
 local function StartGo()
     if not savedTargetPos then
         Tween(GoBtn,{TextColor3=C.red})
-        task.delay(0.5, function() Tween(GoBtn,{TextColor3=C.textMid}) end)
+        task.delay(0.5,function() Tween(GoBtn,{TextColor3=C.textMid}) end)
         return
     end
-    isGoingToTarget = true
-    GoBtn.Text = "Going… (tap to stop)"; SetOn(GoBtn, GoBtnS, C.green)
+    isGoingToTarget=true
+    GoBtn.Text="🚶  Going… (tap to stop)"; SetOn(GoBtn,GoBtnS,C.green)
     local function step()
-        local hum = GetHumanoid(); local rp = GetRootPart()
-        if not hum or not rp then StopGo(); return end
-        hum.WalkSpeed = fastWalkSpeed; hum:MoveTo(savedTargetPos)
+        local hum=GetHumanoid(); local rp=GetRootPart()
+        if not hum or not rp then StopGo();return end
+        if(rp.Position-savedTargetPos).Magnitude<3 then StopGo();return end
+        hum.WalkSpeed=fastWalkSpeed; hum:MoveTo(savedTargetPos)
     end
     step()
-    goToConnection = RunService.Heartbeat:Connect(function()
+    goToConnection=RunService.Heartbeat:Connect(function()
         if isGoingToTarget then step() end
     end)
 end
@@ -915,11 +1255,11 @@ end)
 -- =================================================================
 local function ShowFarmMarker(pos)
     if autoFarmMarker and autoFarmMarker.Parent then autoFarmMarker:Destroy() end
-    local p = Instance.new("Part")
+    local p=Instance.new("Part")
     p.Name="AutoFarmMarker"; p.Size=Vector3.new(2,0.4,2); p.Anchored=true
     p.CanCollide=false; p.Material=Enum.Material.Neon
     p.Color=C.gold; p.Transparency=0.2; p.Position=pos; p.Parent=workspace
-    autoFarmMarker = p
+    autoFarmMarker=p
     task.spawn(function()
         while p and p.Parent do
             Tween(p,{Transparency=0.7,Size=Vector3.new(2.6,0.4,2.6)},
@@ -933,89 +1273,76 @@ local function ShowFarmMarker(pos)
 end
 
 local function StopAutoFarm()
-    autoFarmEnabled = false
-    if autoFarmConnection then autoFarmConnection:Disconnect(); autoFarmConnection = nil end
-    local hum = GetHumanoid()
-    if hum then hum.WalkSpeed = currentSpeed end
-    FarmToggleBtn.Text = "⚙️  AutoFarm: OFF"
-    FarmStatusLbl.Text = autoFarmTarget and "Spot saved — ready to farm" or "No spot marked yet"
-    FarmStatusLbl.TextColor3 = C.textDim
-    Tween(FarmToggleBtnS, {Color=C.gold, Transparency=0.35})
-    Tween(FarmToggleBtn,  {TextColor3=C.textGold, BackgroundColor3=Color3.fromRGB(24,20,8)})
+    autoFarmEnabled=false
+    if autoFarmConnection then autoFarmConnection:Disconnect();autoFarmConnection=nil end
+    local hum=GetHumanoid()
+    if hum then hum.WalkSpeed=currentSpeed end
+    FarmToggleBtn.Text="⚙️  AutoFarm: OFF"
+    FarmStatusLbl.Text=autoFarmTarget and "Spot saved — ready to farm" or "No spot marked yet"
+    FarmStatusLbl.TextColor3=C.textDim
+    SetOff(FarmToggleBtn,FarmToggleBtnS,C.gold)
 end
 
 local function StartAutoFarm()
     if not autoFarmTarget then
-        FarmStatusLbl.Text = "⚠  No spot marked!"
-        FarmStatusLbl.TextColor3 = C.red
-        task.delay(1.5, function()
-            FarmStatusLbl.Text = autoFarmTarget and "Spot saved" or "No spot marked yet"
-            FarmStatusLbl.TextColor3 = C.textDim
+        FarmStatusLbl.Text="⚠  No spot marked!"; FarmStatusLbl.TextColor3=C.red
+        task.delay(1.5,function()
+            FarmStatusLbl.Text="No spot marked yet"; FarmStatusLbl.TextColor3=C.textDim
         end)
         return
     end
-    autoFarmEnabled = true
-    FarmToggleBtn.Text = "⚙️  AutoFarm: ON"
-    FarmStatusLbl.Text = "🌾  Farming…"
-    FarmStatusLbl.TextColor3 = C.textGold
-    Tween(FarmToggleBtnS, {Color=C.green, Transparency=0})
-    Tween(FarmToggleBtn,  {TextColor3=C.textOn, BackgroundColor3=Color3.fromRGB(10,24,12)})
+    autoFarmEnabled=true; FarmToggleBtn.Text="⚙️  AutoFarm: ON"
+    FarmStatusLbl.Text="🌾  Farming…"; FarmStatusLbl.TextColor3=C.gold
+    SetOn(FarmToggleBtn,FarmToggleBtnS,C.green)
     if not platformEnabled then ApplyPlatform(true) end
     if not noclipEnabled then
-        noclipEnabled = true
-        NoclipBtn.Text = "Noclip: ON"; SetOn(NoclipBtn, NoclipBtnS, C.green)
+        noclipEnabled=true; NoclipBtn.Text="👻  Noclip: ON"; SetOn(NoclipBtn,NoclipBtnS,C.green)
     end
-    local tick = 0
-    autoFarmConnection = RunService.Heartbeat:Connect(function()
+    local tick2=0
+    autoFarmConnection=RunService.Heartbeat:Connect(function()
         if not autoFarmEnabled then return end
-        local hum = GetHumanoid(); local rp = GetRootPart()
+        local hum=GetHumanoid(); local rp=GetRootPart()
         if not hum or not rp then return end
-        local ch = GetCharacter()
-        if ch then for _, p in ipairs(ch:GetDescendants()) do
-            if p:IsA("BasePart") then p.CanCollide = false end
+        local ch=GetCharacter()
+        if ch then for _,p in ipairs(ch:GetDescendants()) do
+            if p:IsA("BasePart") then p.CanCollide=false end
         end end
-        hum.WalkSpeed = 80; hum:MoveTo(autoFarmTarget)
-        tick = tick + 1
-        if tick % 180 == 0 then
-            local d = string.rep(".", (math.floor(tick/60)%3)+1)
-            FarmStatusLbl.Text = "🌾  Farming"..d
+        hum.WalkSpeed=80; hum:MoveTo(autoFarmTarget); tick2=tick2+1
+        if tick2%180==0 then
+            FarmStatusLbl.Text="🌾  Farming"..string.rep(".",((tick2//60)%3)+1)
         end
     end)
 end
 
 FarmMarkBtn.MouseButton1Click:Connect(function()
     if autoFarmMarking then
-        autoFarmMarking = false
-        if autoFarmMarkConn then autoFarmMarkConn:Disconnect(); autoFarmMarkConn = nil end
-        FarmMarkBtn.Text = "🎯  Mark Farm Spot"
-        Tween(FarmMarkBtnS, {Color=C.gold, Transparency=0.35})
+        autoFarmMarking=false
+        if autoFarmMarkConn then autoFarmMarkConn:Disconnect();autoFarmMarkConn=nil end
+        FarmMarkBtn.Text="🎯  Mark Farm Spot"; SetOff(FarmMarkBtn,FarmMarkBtnS,C.gold)
         return
     end
-    autoFarmMarking = true
-    FarmMarkBtn.Text = "👆  Tap world to mark…"
-    Tween(FarmMarkBtnS, {Color=C.green, Transparency=0})
-    autoFarmMarkConn = UIS.InputBegan:Connect(function(inp, gpe)
+    autoFarmMarking=true; FarmMarkBtn.Text="👆  Tap world to mark…"
+    SetOn(FarmMarkBtn,FarmMarkBtnS,C.green)
+    autoFarmMarkConn=UIS.InputBegan:Connect(function(inp,gpe)
         if gpe then return end
-        if inp.UserInputType ~= Enum.UserInputType.MouseButton1
-        and inp.UserInputType ~= Enum.UserInputType.Touch then return end
-        local cam = workspace.CurrentCamera
-        local ray = cam:ScreenPointToRay(inp.Position.X, inp.Position.Y)
-        local params = RaycastParams.new()
-        params.FilterType = Enum.RaycastFilterType.Exclude
-        local excl = {}
-        if GetCharacter()  then table.insert(excl, GetCharacter()) end
-        if autoFarmMarker  then table.insert(excl, autoFarmMarker) end
-        params.FilterDescendantsInstances = excl
-        local result = workspace:Raycast(ray.Origin, ray.Direction*2000, params)
+        if inp.UserInputType~=Enum.UserInputType.MouseButton1
+        and inp.UserInputType~=Enum.UserInputType.Touch then return end
+        local cam=workspace.CurrentCamera
+        local ray=cam:ScreenPointToRay(inp.Position.X,inp.Position.Y)
+        local params=RaycastParams.new(); params.FilterType=Enum.RaycastFilterType.Exclude
+        local excl={}
+        if GetCharacter() then table.insert(excl,GetCharacter()) end
+        if autoFarmMarker then table.insert(excl,autoFarmMarker) end
+        params.FilterDescendantsInstances=excl
+        local result=workspace:Raycast(ray.Origin,ray.Direction*2000,params)
         if result then
-            autoFarmTarget = result.Position; ShowFarmMarker(autoFarmTarget)
-            FarmStatusLbl.Text = "✅  Spot set! Tap AutoFarm to start"
-            FarmStatusLbl.TextColor3 = C.textGold
+            autoFarmTarget=result.Position; ShowFarmMarker(autoFarmTarget)
+            FarmStatusLbl.Text="✅  Spot set! Tap AutoFarm to start"
+            FarmStatusLbl.TextColor3=C.gold
         end
-        autoFarmMarking = false
-        if autoFarmMarkConn then autoFarmMarkConn:Disconnect(); autoFarmMarkConn = nil end
-        FarmMarkBtn.Text = "🎯  Mark Farm Spot"
-        Tween(FarmMarkBtnS, {Color=C.gold, Transparency=0.35})
+        autoFarmMarking=false
+        if autoFarmMarkConn then autoFarmMarkConn:Disconnect();autoFarmMarkConn=nil end
+        FarmMarkBtn.Text="🎯  Mark Farm Spot"; SetOff(FarmMarkBtn,FarmMarkBtnS,C.gold)
     end)
 end)
 
@@ -1026,88 +1353,72 @@ end)
 -- =================================================================
 -- FAKE BLOCK ESP
 -- =================================================================
-local FAKE_ESP_COLOR   = Color3.fromRGB(180, 80, 255)
-local FAKE_ESP_FILL    = Color3.fromRGB(160, 60, 255)
-local FAKE_ESP_REFRESH = 2
-
-local ESP_IGNORE = {
-    DeltaStatic_InvisibleFloor = true,
-    NavMarker                  = true,
-    AutoFarmMarker             = true,
-    HumanoidRootPart           = true,
-}
+local FAKE_ESP_COLOR=Color3.fromRGB(180,80,255)
+local FAKE_ESP_FILL=Color3.fromRGB(160,60,255)
+local ESP_IGNORE={DeltaStatic_InvisibleFloor=true,NavMarker=true,AutoFarmMarker=true,HumanoidRootPart=true}
 
 local function IsFakeBlock(part)
-    if not part:IsA("BasePart")             then return false end
-    if part.CanCollide                       then return false end
-    if ESP_IGNORE[part.Name]                 then return false end
-    for _, plr in ipairs(Players:GetPlayers()) do
-        local ch = plr.Character
-        if ch and part:IsDescendantOf(ch)   then return false end
+    if not part:IsA("BasePart") then return false end
+    if part.CanCollide          then return false end
+    if ESP_IGNORE[part.Name]    then return false end
+    for _,plr in ipairs(Players:GetPlayers()) do
+        local ch=plr.Character
+        if ch and part:IsDescendantOf(ch) then return false end
     end
-    if platformPart and part == platformPart then return false end
+    if platformPart and part==platformPart then return false end
     return true
 end
 
 local function ClearFakeESP()
-    for _, box in pairs(fakeESPHighlights) do pcall(function() box:Destroy() end) end
-    fakeESPHighlights = {}
-    espCountLbl.Text = "Blocks found: —"; espCountLbl.TextColor3 = C.textDim
+    for _,box in pairs(fakeESPHighlights) do pcall(function() box:Destroy() end) end
+    fakeESPHighlights={}; espCountLbl.Text="Blocks found: —"; espCountLbl.TextColor3=C.textDim
 end
 
 local function BuildFakeESP()
-    for part, box in pairs(fakeESPHighlights) do
+    for part,box in pairs(fakeESPHighlights) do
         if not part or not part.Parent or part.CanCollide then
-            pcall(function() box:Destroy() end); fakeESPHighlights[part] = nil
+            pcall(function() box:Destroy() end); fakeESPHighlights[part]=nil
         end
     end
-    local count = 0
-    for _, obj in ipairs(workspace:GetDescendants()) do
+    local count=0
+    for _,obj in ipairs(workspace:GetDescendants()) do
         if IsFakeBlock(obj) then
-            count = count + 1
+            count=count+1
             if not fakeESPHighlights[obj] or not fakeESPHighlights[obj].Parent then
-                local box = Instance.new("SelectionBox")
-                box.Name = "FakeESP_Box"; box.Adornee = obj
-                box.Color3 = FAKE_ESP_COLOR; box.LineThickness = 0.06
-                box.SurfaceColor3 = FAKE_ESP_FILL; box.SurfaceTransparency = 0.78
-                box.Parent = CoreGui; fakeESPHighlights[obj] = box
+                local box=Instance.new("SelectionBox")
+                box.Name="FakeESP_Box"; box.Adornee=obj
+                box.Color3=FAKE_ESP_COLOR; box.LineThickness=0.06
+                box.SurfaceColor3=FAKE_ESP_FILL; box.SurfaceTransparency=0.78
+                box.Parent=CoreGui; fakeESPHighlights[obj]=box
             end
         end
     end
-    espCountLbl.Text = "👻  "..count.." fake block"..(count==1 and "" or "s").." found"
-    espCountLbl.TextColor3 = count > 0 and C.textPurple or C.textDim
+    espCountLbl.Text="👻  "..count.." fake block"..(count==1 and "" or "s").." found"
+    espCountLbl.TextColor3=count>0 and C.textPurple or C.textDim
 end
 
 local function StartFakeESP()
-    fakeESPEnabled = true
-    FakeESPBtn.Text = "👻  Fake Block ESP: ON"
-    Tween(FakeESPBtnS, {Color=C.green, Transparency=0})
-    Tween(FakeESPBtn,  {TextColor3=C.textOn, BackgroundColor3=Color3.fromRGB(12,8,28)})
-    BuildFakeESP()
-    fakeESPConnection = task.spawn(function()
-        while fakeESPEnabled do
-            task.wait(FAKE_ESP_REFRESH)
-            if fakeESPEnabled then BuildFakeESP() end
-        end
+    fakeESPEnabled=true; FakeESPBtn.Text="👻  Fake Block ESP: ON"
+    SetOn(FakeESPBtn,FakeESPBtnS,C.green); BuildFakeESP()
+    fakeESPConnection=task.spawn(function()
+        while fakeESPEnabled do task.wait(2); if fakeESPEnabled then BuildFakeESP() end end
     end)
     workspace.DescendantAdded:Connect(function(obj)
-        if not fakeESPEnabled then return end
-        task.wait()
+        if not fakeESPEnabled then return end; task.wait()
         if IsFakeBlock(obj) and not fakeESPHighlights[obj] then
-            local box = Instance.new("SelectionBox")
-            box.Name = "FakeESP_Box"; box.Adornee = obj
-            box.Color3 = FAKE_ESP_COLOR; box.LineThickness = 0.06
-            box.SurfaceColor3 = FAKE_ESP_FILL; box.SurfaceTransparency = 0.78
-            box.Parent = CoreGui; fakeESPHighlights[obj] = box
+            local box=Instance.new("SelectionBox")
+            box.Name="FakeESP_Box"; box.Adornee=obj
+            box.Color3=FAKE_ESP_COLOR; box.LineThickness=0.06
+            box.SurfaceColor3=FAKE_ESP_FILL; box.SurfaceTransparency=0.78
+            box.Parent=CoreGui; fakeESPHighlights[obj]=box
         end
     end)
 end
 
 local function StopFakeESP()
-    fakeESPEnabled = false; ClearFakeESP()
-    FakeESPBtn.Text = "👻  Fake Block ESP: OFF"
-    Tween(FakeESPBtnS, {Color=C.purple, Transparency=0.35})
-    Tween(FakeESPBtn,  {TextColor3=C.textPurple, BackgroundColor3=Color3.fromRGB(18,12,32)})
+    fakeESPEnabled=false; ClearFakeESP()
+    FakeESPBtn.Text="👻  Fake Block ESP: OFF"
+    SetOff(FakeESPBtn,FakeESPBtnS,C.purple)
 end
 
 FakeESPBtn.MouseButton1Click:Connect(function()
@@ -1115,107 +1426,330 @@ FakeESPBtn.MouseButton1Click:Connect(function()
 end)
 
 -- =================================================================
--- FPS BOOST (Standard)
+-- SEE THROUGH WALLS
+-- =================================================================
+local function ApplySeeThru(enable)
+    for _,c in pairs(seeThruConnections) do pcall(function() c:Disconnect() end) end
+    seeThruConnections={}
+    if enable then
+        local function makeThru(obj)
+            if not obj:IsA("BasePart") and not obj:IsA("MeshPart") then return end
+            for _,plr in ipairs(Players:GetPlayers()) do
+                if plr.Character and obj:IsDescendantOf(plr.Character) then return end
+            end
+            if ESP_IGNORE[obj.Name] then return end
+            pcall(function() obj.LocalTransparencyModifier=0.6 end)
+        end
+        for _,obj in ipairs(workspace:GetDescendants()) do makeThru(obj) end
+        local conn=workspace.DescendantAdded:Connect(function(obj)
+            task.wait(); if seeThruEnabled then makeThru(obj) end
+        end)
+        table.insert(seeThruConnections,conn)
+    else
+        for _,obj in ipairs(workspace:GetDescendants()) do
+            if obj:IsA("BasePart") or obj:IsA("MeshPart") then
+                pcall(function() obj.LocalTransparencyModifier=0 end)
+            end
+        end
+    end
+end
+
+SeeThruBtn.MouseButton1Click:Connect(function()
+    seeThruEnabled=not seeThruEnabled
+    SeeThruBtn.Text=seeThruEnabled and "🔍  See Through Walls: ON" or "🔍  See Through Walls: OFF"
+    if seeThruEnabled then SetOn(SeeThruBtn,SeeThruBtnS,C.green)
+    else SetOff(SeeThruBtn,SeeThruBtnS,C.purple) end
+    ApplySeeThru(seeThruEnabled)
+end)
+
+-- =================================================================
+-- FPS BOOST (standard)
 -- =================================================================
 local function OptimizeObj(obj)
     pcall(function()
         if obj:IsA("ParticleEmitter") or obj:IsA("Smoke")
-        or obj:IsA("Fire") or obj:IsA("Sparkles") then obj.Enabled = false
-        elseif obj:IsA("Explosion") then obj.Visible = false
+        or obj:IsA("Fire") or obj:IsA("Sparkles") then obj.Enabled=false
+        elseif obj:IsA("Explosion") then obj.Visible=false
         elseif obj:IsA("MeshPart") or obj:IsA("Part")
         or obj:IsA("CornerWedgePart") or obj:IsA("WedgePart") or obj:IsA("TrussPart") then
-            if not ESP_IGNORE[obj.Name] and obj.Name ~= "AutoFarmMarker" then
-                obj.Material = Enum.Material.SmoothPlastic
-                obj.Reflectance = 0; obj.CastShadow = false
+            if not ESP_IGNORE[obj.Name] and obj.Name~="AutoFarmMarker" then
+                obj.Material=Enum.Material.SmoothPlastic
+                obj.Reflectance=0; obj.CastShadow=false
             end
-        elseif obj:IsA("Decal") or obj:IsA("Texture") then obj.Transparency = 1
-        elseif obj:IsA("Sky")        then obj.Parent = nil
-        elseif obj:IsA("Atmosphere") then obj.Density=0; obj.Glare=0; obj.Haze=0
+        elseif obj:IsA("Decal") or obj:IsA("Texture") then obj.Transparency=1
+        elseif obj:IsA("Sky")        then obj.Parent=nil
+        elseif obj:IsA("Atmosphere") then obj.Density=0;obj.Glare=0;obj.Haze=0
         end
     end)
 end
 
-FPSBtn.MouseButton1Click:Connect(function()
-    if fpsBoosted then FPSBtn.Text = "FPS Boost: already ON"; return end
-    fpsBoosted = true
+local function DoFPSBoost()
+    if fpsBoosted then return end; fpsBoosted=true
     pcall(function()
-        UserSettings():GetService("UserGameSettings").SavedQualityLevel =
+        UserSettings():GetService("UserGameSettings").SavedQualityLevel=
             Enum.SavedQualitySetting.QualityLevel1
     end)
-    Lighting.GlobalShadows = false; Lighting.FogEnd = 9e9
+    Lighting.GlobalShadows=false; Lighting.FogEnd=9e9
     task.spawn(function()
-        local desc = game:GetDescendants()
-        for i, o in ipairs(desc) do
-            OptimizeObj(o); if i % 400 == 0 then task.wait() end
-        end
+        local desc=game:GetDescendants()
+        for i,o in ipairs(desc) do OptimizeObj(o); if i%400==0 then task.wait() end end
     end)
     game.DescendantAdded:Connect(OptimizeObj)
-    FPSBtn.Text = "FPS Boost: ON"; SetOn(FPSBtn, FPSBtnS, C.green)
-end)
+    FPSBtn.Text="🚀  FPS Boost: ON";   SetOn(FPSBtn,FPSBtnS,C.green)
+    FPSBtn2.Text="🚀  FPS Boost: ON";  SetOn(FPSBtn2,FPSBtn2S,C.green)
+end
+
+FPSBtn.MouseButton1Click:Connect(DoFPSBoost)
+FPSBtn2.MouseButton1Click:Connect(DoFPSBoost)
 
 -- =================================================================
 -- FULL BRIGHT
 -- =================================================================
 BrightBtn.MouseButton1Click:Connect(function()
-    brightEnabled = not brightEnabled
-    local amb = brightEnabled and Color3.fromRGB(255,255,255) or Color3.fromRGB(128,128,128)
+    brightEnabled=not brightEnabled
+    local amb=brightEnabled and Color3.fromRGB(255,255,255) or Color3.fromRGB(128,128,128)
     Tween(Lighting,{Ambient=amb,OutdoorAmbient=amb,Brightness=brightEnabled and 2 or 1},tweenMed)
-    BrightBtn.Text = brightEnabled and "Full Bright: ON" or "Full Bright: OFF"
+    BrightBtn.Text=brightEnabled and "☀  Full Bright: ON" or "☀  Full Bright: OFF"
     if brightEnabled then SetOn(BrightBtn,BrightBtnS,C.green) else SetOff(BrightBtn,BrightBtnS) end
 end)
 
 -- =================================================================
 -- PLAYER ESP
 -- =================================================================
-local espEnabled    = false
-local espHighlights = {}
-
 local function RemoveESP()
-    for _, h in pairs(espHighlights) do pcall(function() h:Destroy() end) end
-    espHighlights = {}
+    for _,h in pairs(espHighlights) do pcall(function() h:Destroy() end) end
+    espHighlights={}
 end
 
 local function AddESP(plr)
-    if plr == LocalPlayer then return end
-    local ch = plr.Character; if not ch then return end
+    if plr==LocalPlayer then return end
+    local ch=plr.Character; if not ch then return end
     if espHighlights[plr] and espHighlights[plr].Parent then return end
-    local h = Instance.new("SelectionBox")
-    h.Name = "ESP_"..plr.Name; h.Color3 = C.red; h.LineThickness = 0.04
-    h.SurfaceTransparency = 1; h.Adornee = ch; h.Parent = CoreGui
-    espHighlights[plr] = h
+    local h=Instance.new("SelectionBox")
+    h.Name="ESP_"..plr.Name; h.Color3=C.red; h.LineThickness=0.04
+    h.SurfaceTransparency=1; h.Adornee=ch; h.Parent=CoreGui
+    espHighlights[plr]=h
 end
 
 RunService.Heartbeat:Connect(function()
     if not espEnabled then return end
-    for plr, h in pairs(espHighlights) do
+    for plr,h in pairs(espHighlights) do
         if not plr or not plr.Character then
-            pcall(function() h:Destroy() end); espHighlights[plr] = nil
-        elseif h.Adornee ~= plr.Character then h.Adornee = plr.Character end
+            pcall(function() h:Destroy() end); espHighlights[plr]=nil
+        elseif h.Adornee~=plr.Character then h.Adornee=plr.Character end
     end
-    for _, plr in ipairs(Players:GetPlayers()) do AddESP(plr) end
+    for _,plr in ipairs(Players:GetPlayers()) do AddESP(plr) end
 end)
 
 ESPBtn.MouseButton1Click:Connect(function()
-    espEnabled = not espEnabled
-    ESPBtn.Text = espEnabled and "Player ESP: ON" or "Player ESP: OFF"
-    if espEnabled then
-        SetOn(ESPBtn, ESPBtnS, C.green)
-        for _, p in ipairs(Players:GetPlayers()) do AddESP(p) end
-    else SetOff(ESPBtn, ESPBtnS); RemoveESP() end
+    espEnabled=not espEnabled
+    ESPBtn.Text=espEnabled and "👤  Player ESP: ON" or "👤  Player ESP: OFF"
+    if espEnabled then SetOn(ESPBtn,ESPBtnS,C.green)
+        for _,p in ipairs(Players:GetPlayers()) do AddESP(p) end
+    else SetOff(ESPBtn,ESPBtnS,C.red); RemoveESP() end
+end)
+
+-- =================================================================
+-- FREECAM
+-- =================================================================
+local freecamBody=nil; local freecamGyro=nil
+local function StopFreecam()
+    freecamEnabled=false
+    if freecamBody then freecamBody:Destroy();freecamBody=nil end
+    if freecamGyro  then freecamGyro:Destroy();freecamGyro=nil end
+    local hum=GetHumanoid()
+    if hum then hum.PlatformStand=false end
+    workspace.CurrentCamera.CameraType=Enum.CameraType.Custom
+    FreecamBtn.Text="🎥  Freecam: OFF"; SetOff(FreecamBtn,FreecamBtnS)
+    camStatusLbl.Text="Freecam: WASD + mouse to fly"
+end
+
+local function StartFreecam()
+    local rp=GetRootPart(); local hum=GetHumanoid()
+    if not rp or not hum then return end
+    freecamEnabled=true
+    freecamBody=Instance.new("BodyVelocity",rp)
+    freecamBody.Velocity=Vector3.zero; freecamBody.MaxForce=Vector3.new(1e5,1e5,1e5)
+    freecamGyro=Instance.new("BodyGyro",rp)
+    freecamGyro.MaxTorque=Vector3.new(1e5,1e5,1e5); freecamGyro.P=1e4
+    hum.PlatformStand=true
+    workspace.CurrentCamera.CameraType=Enum.CameraType.Scriptable
+    FreecamBtn.Text="🎥  Freecam: ON"; SetOn(FreecamBtn,FreecamBtnS,C.green)
+    camStatusLbl.Text="Active — WASD/joystick to move"
+end
+
+FreecamBtn.MouseButton1Click:Connect(function()
+    if freecamEnabled then StopFreecam() else StartFreecam() end
+end)
+
+RunService.RenderStepped:Connect(function()
+    if not freecamEnabled or not freecamBody or not freecamGyro then return end
+    local cam=workspace.CurrentCamera; local dir=Vector3.zero
+    local hum=GetHumanoid()
+    if UIS:IsKeyDown(Enum.KeyCode.W) then dir=dir+cam.CFrame.LookVector end
+    if UIS:IsKeyDown(Enum.KeyCode.S) then dir=dir-cam.CFrame.LookVector end
+    if UIS:IsKeyDown(Enum.KeyCode.A) then dir=dir-cam.CFrame.RightVector end
+    if UIS:IsKeyDown(Enum.KeyCode.D) then dir=dir+cam.CFrame.RightVector end
+    if UIS:IsKeyDown(Enum.KeyCode.Space) then dir=dir+Vector3.yAxis end
+    if UIS:IsKeyDown(Enum.KeyCode.LeftShift) then dir=dir-Vector3.yAxis end
+    if hum and hum.MoveDirection.Magnitude>0.1 then
+        local md=hum.MoveDirection
+        local fwd=Vector3.new(cam.CFrame.LookVector.X,0,cam.CFrame.LookVector.Z).Unit
+        local rgt=Vector3.new(cam.CFrame.RightVector.X,0,cam.CFrame.RightVector.Z).Unit
+        dir=dir+(fwd*md.Z+rgt*md.X)
+    end
+    freecamBody.Velocity=dir.Magnitude>0 and dir.Unit*50 or Vector3.zero
+    freecamGyro.CFrame=cam.CFrame
+    cam.CFrame=CFrame.new(cam.CFrame.Position+dir*(dir.Magnitude>0 and 0 or 0))
+end)
+
+-- =================================================================
+-- FOV UNLOCK
+-- =================================================================
+FOVBtn.MouseButton1Click:Connect(function()
+    fovEnabled=not fovEnabled
+    FOVBtn.Text=fovEnabled and "🔭  FOV Unlock: ON" or "🔭  FOV Unlock: OFF"
+    if fovEnabled then
+        SetOn(FOVBtn,FOVBtnS,C.green)
+        workspace.CurrentCamera.FieldOfView=originalFOV
+    else
+        SetOff(FOVBtn,FOVBtnS)
+        workspace.CurrentCamera.FieldOfView=70
+    end
+end)
+
+-- =================================================================
+-- TROLL — THROW INTO VOID
+-- =================================================================
+ThrowBtn.MouseButton1Click:Connect(function()
+    if not selectedTrollPlayer then
+        trollStatusLbl.Text="⚠  No player selected!"
+        trollStatusLbl.TextColor3=C.red
+        task.delay(1.5,function()
+            trollStatusLbl.Text="Select a player first"
+            trollStatusLbl.TextColor3=C.textDim
+        end)
+        return
+    end
+    local targetCh=selectedTrollPlayer.Character
+    if not targetCh then
+        trollStatusLbl.Text="⚠  Player has no character"; trollStatusLbl.TextColor3=C.red
+        return
+    end
+    -- Save our own position first
+    local ourRp=GetRootPart()
+    local savedPos=ourRp and ourRp.CFrame
+
+    local targetRp=targetCh:FindFirstChild("HumanoidRootPart")
+    if targetRp then
+        -- Move them far below the map
+        targetRp.CFrame=CFrame.new(0,-5000,0)
+        trollStatusLbl.Text="✅  "..selectedTrollPlayer.Name.." thrown!"
+        trollStatusLbl.TextColor3=C.green
+    end
+
+    -- Safely return our player if we moved
+    if ourRp and savedPos then
+        task.delay(0.1,function()
+            ourRp.CFrame=savedPos
+        end)
+    end
+    task.delay(2,function()
+        trollStatusLbl.Text="Select a player first"
+        trollStatusLbl.TextColor3=C.textDim
+    end)
+end)
+
+-- =================================================================
+-- PRESET SAVE / LOAD
+-- =================================================================
+local function GetCurrentPreset()
+    return {
+        airJump=airJumpEnabled, noclip=noclipEnabled, fly=flyEnabled,
+        extreme=extremeSpeedEnabled, speedLock=speedLockEnabled,
+        platform=platformEnabled, platformCollide=platformCollide,
+        bright=brightEnabled, esp=espEnabled, fakeESP=fakeESPEnabled,
+        seeThru=seeThruEnabled, fov=fovEnabled,
+        currentSpeed=currentSpeed, currentJump=currentJump, fastWalkSpeed=fastWalkSpeed,
+    }
+end
+
+SavePresetBtn.MouseButton1Click:Connect(function()
+    savedPreset=GetCurrentPreset()
+    presetStatusLbl.Text="✅  Preset saved!"
+    presetStatusLbl.TextColor3=C.green
+    Tween(SavePresetBtn,{TextColor3=C.textOn})
+    task.delay(1.5,function()
+        presetStatusLbl.Text="Saves current toggle states (client only)"
+        presetStatusLbl.TextColor3=C.textDim
+        Tween(SavePresetBtn,{TextColor3=C.textMid})
+    end)
+end)
+
+LoadPresetBtn.MouseButton1Click:Connect(function()
+    if not next(savedPreset) then
+        presetStatusLbl.Text="⚠  No preset saved yet!"; presetStatusLbl.TextColor3=C.red
+        task.delay(1.5,function()
+            presetStatusLbl.Text="Saves current toggle states (client only)"
+            presetStatusLbl.TextColor3=C.textDim
+        end)
+        return
+    end
+    -- Apply preset
+    if savedPreset.airJump~=airJumpEnabled then AirJumpBtn:TriggerMouseButton1Click() end
+    if savedPreset.noclip~=noclipEnabled    then NoclipBtn:TriggerMouseButton1Click()  end
+    if savedPreset.bright~=brightEnabled    then BrightBtn:TriggerMouseButton1Click()  end
+    if savedPreset.esp~=espEnabled          then ESPBtn:TriggerMouseButton1Click()     end
+    if savedPreset.platform~=platformEnabled then ApplyPlatform(savedPreset.platform)  end
+    presetStatusLbl.Text="✅  Preset loaded!"; presetStatusLbl.TextColor3=C.green
+    task.delay(1.5,function()
+        presetStatusLbl.Text="Saves current toggle states (client only)"
+        presetStatusLbl.TextColor3=C.textDim
+    end)
+end)
+
+-- =================================================================
+-- THEME SWITCH
+-- =================================================================
+ThemeDarkBtn.MouseButton1Click:Connect(function()
+    ApplyTheme("Dark"); themeStatusLbl.Text="Current: Dark"
+    SetOn(ThemeDarkBtn,ThemeDarkBtnS,C.accent)
+    SetOff(ThemeNeonBtn,ThemeNeonBtnS,C.purple)
+    SetOff(ThemeGlassBtn,ThemeGlassBtnS,C.accent)
+end)
+
+ThemeNeonBtn.MouseButton1Click:Connect(function()
+    ApplyTheme("Neon"); themeStatusLbl.Text="Current: Neon"
+    SetOn(ThemeNeonBtn,ThemeNeonBtnS,C.purple)
+    SetOff(ThemeDarkBtn,ThemeDarkBtnS,C.accent)
+    SetOff(ThemeGlassBtn,ThemeGlassBtnS,C.accent)
+end)
+
+ThemeGlassBtn.MouseButton1Click:Connect(function()
+    ApplyTheme("Glass"); themeStatusLbl.Text="Current: Glass"
+    SetOn(ThemeGlassBtn,ThemeGlassBtnS,C.accent)
+    SetOff(ThemeDarkBtn,ThemeDarkBtnS,C.accent)
+    SetOff(ThemeNeonBtn,ThemeNeonBtnS,C.purple)
 end)
 
 -- =================================================================
 -- RESPAWN SAFETY
 -- =================================================================
 LocalPlayer.CharacterAdded:Connect(function()
-    if flyEnabled      then StopFly()      end
-    if isGoingToTarget then StopGo()       end
-    if autoFarmEnabled then StopAutoFarm() end
-    if noclipEnabled   then
-        noclipEnabled = false
-        NoclipBtn.Text = "Noclip: OFF"; SetOff(NoclipBtn, NoclipBtnS)
+    if flyEnabled       then StopFly()       end
+    if freecamEnabled   then StopFreecam()   end
+    if isGoingToTarget  then StopGo()        end
+    if autoFarmEnabled  then StopAutoFarm()  end
+    if noclipEnabled    then
+        noclipEnabled=false
+        NoclipBtn.Text="👻  Noclip: OFF"; SetOff(NoclipBtn,NoclipBtnS)
     end
-    if markingEnabled  then StopMarking(); StartMarking() end
+    if markingEnabled   then StopMarking(); StartMarking() end
 end)
 
-print("✅  Afridi Utility V6  —  Ultra FPS Edition loaded!")
+-- =================================================================
+-- OPEN ON DEFAULT TAB
+-- =================================================================
+SwitchTab("Movement")
+
+print("✅  Afridi Utility V7  —  Tab Edition loaded!")
