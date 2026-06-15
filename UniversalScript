@@ -1,14 +1,14 @@
 --====================================================
--- UNIVERSAL ROBLOX MENU (SINGLE FILE)
--- Mobile + PC Friendly
+-- UNIVERSAL ROBLOX SCRIPT
+-- STEP C: GAME TYPE SELECTION MENU
 --====================================================
 
 -- Prevent double execution
-if _G.__UNIVERSAL_MENU_RUNNING then return end
-_G.__UNIVERSAL_MENU_RUNNING = true
+if _G.__UNIVERSAL_RUNNING then return end
+_G.__UNIVERSAL_RUNNING = true
 
 --====================================================
--- SERVICES & PLAYER
+-- SERVICES
 --====================================================
 local Players = game:GetService("Players")
 local UIS = game:GetService("UserInputService")
@@ -16,6 +16,13 @@ local RunService = game:GetService("RunService")
 
 local lp = Players.LocalPlayer
 local pg = lp:WaitForChild("PlayerGui")
+
+--====================================================
+-- GLOBAL STATE
+--====================================================
+local STATE = {
+	GameType = nil
+}
 
 --====================================================
 -- SCREEN GUI
@@ -26,208 +33,99 @@ gui.ResetOnSpawn = false
 gui.Parent = pg
 
 --====================================================
--- MENU BUTTON (OPEN / CLOSE)
+-- MAIN MENU (HIDDEN FOR NOW)
 --====================================================
-local menuButton = Instance.new("TextButton")
-menuButton.Parent = gui
-menuButton.Size = UDim2.fromOffset(60,60)
-menuButton.Position = UDim2.fromOffset(20,200)
-menuButton.Text = "≡"
-menuButton.Font = Enum.Font.GothamBold
-menuButton.TextSize = 26
-menuButton.TextColor3 = Color3.new(1,1,1)
-menuButton.BackgroundColor3 = Color3.fromRGB(120,0,255)
-menuButton.AutoButtonColor = false
+local mainMenu = Instance.new("Frame")
+mainMenu.Parent = gui
+mainMenu.Size = UDim2.fromOffset(450,320)
+mainMenu.Position = UDim2.fromScale(0.5,0.5)
+mainMenu.AnchorPoint = Vector2.new(0.5,0.5)
+mainMenu.BackgroundColor3 = Color3.fromRGB(25,25,35)
+mainMenu.Visible = false
 
-Instance.new("UICorner", menuButton).CornerRadius = UDim.new(1,0)
+Instance.new("UICorner", mainMenu).CornerRadius = UDim.new(0,20)
+Instance.new("UIStroke", mainMenu).Color = Color3.new(1,1,1)
 
--- Drag button
-do
-	local dragging, dragStart, startPos
-	menuButton.InputBegan:Connect(function(i)
-		if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
-			dragging = true
-			dragStart = i.Position
-			startPos = menuButton.Position
-		end
-	end)
-
-	UIS.InputEnded:Connect(function(i)
-		if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
-			dragging = false
-		end
-	end)
-
-	UIS.InputChanged:Connect(function(i)
-		if dragging and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
-			local delta = i.Position - dragStart
-			menuButton.Position = UDim2.new(
-				startPos.X.Scale,
-				startPos.X.Offset + delta.X,
-				startPos.Y.Scale,
-				startPos.Y.Offset + delta.Y
-			)
-		end
-	end)
-end
+-- Title
+local mainTitle = Instance.new("TextLabel", mainMenu)
+mainTitle.Size = UDim2.new(1,0,0,45)
+mainTitle.Text = "Universal Script"
+mainTitle.Font = Enum.Font.GothamBold
+mainTitle.TextSize = 20
+mainTitle.TextColor3 = Color3.new(1,1,1)
+mainTitle.BackgroundTransparency = 1
 
 --====================================================
--- MAIN MENU FRAME
+-- GAME TYPE SELECTION MENU
 --====================================================
-local menu = Instance.new("Frame")
-menu.Parent = gui
-menu.Size = UDim2.fromOffset(420,300)
-menu.Position = UDim2.fromScale(0.5,0.5)
-menu.AnchorPoint = Vector2.new(0.5,0.5)
-menu.BackgroundColor3 = Color3.fromRGB(25,25,35)
-menu.Visible = false
+local selector = Instance.new("Frame")
+selector.Parent = gui
+selector.Size = UDim2.fromOffset(420,300)
+selector.Position = UDim2.fromScale(0.5,0.5)
+selector.AnchorPoint = Vector2.new(0.5,0.5)
+selector.BackgroundColor3 = Color3.fromRGB(25,25,35)
 
-Instance.new("UICorner", menu).CornerRadius = UDim.new(0,20)
+Instance.new("UICorner", selector).CornerRadius = UDim.new(0,20)
+Instance.new("UIStroke", selector).Color = Color3.new(1,1,1)
 
-local stroke = Instance.new("UIStroke", menu)
-stroke.Color = Color3.new(1,1,1)
-stroke.Thickness = 1.5
+-- Selector Title
+local title = Instance.new("TextLabel", selector)
+title.Size = UDim2.new(1,0,0,50)
+title.Text = "Select Game Type"
+title.Font = Enum.Font.GothamBold
+title.TextSize = 20
+title.TextColor3 = Color3.new(1,1,1)
+title.BackgroundTransparency = 1
 
--- Keep menu inside screen
-RunService.RenderStepped:Connect(function()
-	local cam = workspace.CurrentCamera
-	if not cam then return end
+-- Subtitle
+local sub = Instance.new("TextLabel", selector)
+sub.Position = UDim2.fromOffset(0,45)
+sub.Size = UDim2.new(1,0,0,30)
+sub.Text = "Choose features based on your game"
+sub.Font = Enum.Font.Gotham
+sub.TextSize = 14
+sub.TextColor3 = Color3.fromRGB(200,200,200)
+sub.BackgroundTransparency = 1
 
-	local view = cam.ViewportSize
-	local pos = menu.AbsolutePosition
-	local size = menu.AbsoluteSize
+--====================================================
+-- GAME OPTIONS
+--====================================================
+local options = {
+	"Shooting",
+	"Obby",
+	"Hide & Seek",
+	"Universal"
+}
 
-	local newX = math.clamp(pos.X, 0, view.X - size.X)
-	local newY = math.clamp(pos.Y, 0, view.Y - size.Y)
+for i, name in ipairs(options) do
+	local btn = Instance.new("TextButton")
+	btn.Parent = selector
+	btn.Size = UDim2.new(1,-40,0,42)
+	btn.Position = UDim2.fromOffset(20, 90 + (i-1)*52)
+	btn.Text = name
+	btn.Font = Enum.Font.GothamBold
+	btn.TextSize = 16
+	btn.TextColor3 = Color3.new(1,1,1)
+	btn.BackgroundColor3 = Color3.fromRGB(120,0,255)
+	btn.AutoButtonColor = false
 
-	menu.Position = UDim2.fromOffset(newX + size.X/2, newY + size.Y/2)
-end)
+	Instance.new("UICorner", btn).CornerRadius = UDim.new(0,14)
 
--- Drag menu
-do
-	local dragging, dragStart, startPos
-	menu.InputBegan:Connect(function(i)
-		if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
-			dragging = true
-			dragStart = i.Position
-			startPos = menu.Position
-		end
-	end)
+	btn.Activated:Connect(function()
+		STATE.GameType = name
+		print("🎮 Selected:", name)
 
-	UIS.InputEnded:Connect(function(i)
-		if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
-			dragging = false
-		end
-	end)
-
-	UIS.InputChanged:Connect(function(i)
-		if dragging and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
-			local delta = i.Position - dragStart
-			menu.Position = UDim2.new(
-				startPos.X.Scale,
-				startPos.X.Offset + delta.X,
-				startPos.Y.Scale,
-				startPos.Y.Offset + delta.Y
-			)
-		end
+		-- Close selector, open main menu
+		selector.Visible = false
+		mainMenu.Visible = true
 	end)
 end
 
--- Toggle menu
-menuButton.Activated:Connect(function()
-	menu.Visible = not menu.Visible
-	menuButton.Visible = not menu.Visible
-end)
-
 --====================================================
--- TOP BAR
+-- SIMPLE START ANIMATION
 --====================================================
-local top = Instance.new("TextLabel", menu)
-top.Size = UDim2.new(1,0,0,40)
-top.Text = "Universal Script"
-top.Font = Enum.Font.GothamBold
-top.TextSize = 18
-top.TextColor3 = Color3.new(1,1,1)
-top.BackgroundTransparency = 1
+selector.Position = UDim2.fromScale(0.5,0.6)
+RunService.RenderStepped:Wait()
+selector.Position = UDim2.fromScale(0.5,0.5)
 
-local closeBtn = Instance.new("TextButton", top)
-closeBtn.Size = UDim2.fromOffset(40,40)
-closeBtn.Position = UDim2.new(1,-40,0,0)
-closeBtn.Text = "✖"
-closeBtn.Font = Enum.Font.GothamBold
-closeBtn.TextSize = 18
-closeBtn.TextColor3 = Color3.new(1,1,1)
-closeBtn.BackgroundTransparency = 1
-
-closeBtn.Activated:Connect(function()
-	gui:Destroy()
-	_G.__UNIVERSAL_MENU_RUNNING = nil
-end)
-
---====================================================
--- CONTENT AREA
---====================================================
-local content = Instance.new("Frame", menu)
-content.Position = UDim2.fromOffset(20,60)
-content.Size = UDim2.new(1,-40,1,-80)
-content.BackgroundTransparency = 1
-
---====================================================
--- MOVEMENT FEATURES
---====================================================
--- Movement
-local hum
-local function getHum()
-	local char = lp.Character or lp.CharacterAdded:Wait()
-	hum = char:WaitForChild("Humanoid")
-	return hum
-end
-getHum()
-
--- Speed
-hum.WalkSpeed = 28
-
--- Jump
-hum.JumpPower = 70
-
--- Air Jump
-UIS.JumpRequest:Connect(function()
-	if hum and hum.FloorMaterial == Enum.Material.Air then
-		hum:ChangeState(Enum.HumanoidStateType.Jumping)
-	end
-end)
-
--- Fly (toggle with F)
-local flying = false
-UIS.InputBegan:Connect(function(i, g)
-	if g then return end
-	if i.KeyCode == Enum.KeyCode.F then
-		flying = not flying
-	end
-end)
-
-RunService.RenderStepped:Connect(function()
-	if flying and hum then
-		hum:ChangeState(Enum.HumanoidStateType.Physics)
-		local hrp = hum.Parent:FindFirstChild("HumanoidRootPart")
-		if hrp then
-			hrp.Velocity = workspace.CurrentCamera.CFrame.LookVector * 50
-		end
-	end
-end)
-
---====================================================
--- VISUALS (PLACEHOLDER)
---====================================================
--- Visuals
--- ESP, Highlights, FOV circle later
-
-local info = Instance.new("TextLabel", content)
-info.Size = UDim2.new(1,0,0,40)
-info.Text = "Movement loaded ✓  |  Press F to Fly"
-info.Font = Enum.Font.GothamBold
-info.TextSize = 14
-info.TextColor3 = Color3.new(1,1,1)
-info.BackgroundTransparency = 1
-
-print("✅ Universal Single-File Script Loaded")
+print("✅ Game Type Selector Loaded")
